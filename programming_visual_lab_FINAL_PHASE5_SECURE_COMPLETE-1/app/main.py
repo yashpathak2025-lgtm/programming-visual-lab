@@ -10,10 +10,12 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from .executor import execute
+from .auth import router as auth_router
 
 BASE = Path(__file__).resolve().parent
 
-app = FastAPI(title="Programming Visual Lab", version="5.0.1")
+app = FastAPI(title="Programming Visual Lab", version="6.0.0")
+app.include_router(auth_router)
 ALLOWED_ORIGINS = [x.strip() for x in os.environ.get("PVL_ALLOWED_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
@@ -26,16 +28,25 @@ class RunRequest(BaseModel):
 @app.get("/")
 def index():
     html = (BASE / "static" / "index.html").read_text(encoding="utf-8")
+    # Keep the existing editor intact, but inject the Phase 6 learning shell directly
+    # from the deployed image so browser/cache state cannot leave the new UI behind.
+    bridge = (BASE / "static" / "input-bridge.js").read_text(encoding="utf-8")
+    academy_css = (BASE / "static" / "academy.css").read_text(encoding="utf-8")
+    academy_js = (BASE / "static" / "academy.js").read_text(encoding="utf-8")
+    if "pvl-academy-open" not in html:
+        html = html.replace("</head>", "<style id='pvl-academy-css'>" + academy_css + "</style></head>")
     if "/static/input-bridge.js" not in html:
-        html = html.replace("</body>", '<script src="/static/input-bridge.js"></script></body>')
-    return HTMLResponse(html)
+        html = html.replace("</body>", "<script>" + bridge + "</script></body>")
+    if "Programming Visual Lab — Phase 6" not in html:
+        html = html.replace("</body>", "<script>/* Programming Visual Lab — Phase 6 */" + academy_js + "</script></body>")
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 @app.get("/api/health")
 def health():
     return {
         "ok": True,
-        "version": "5.0.1",
-        "phases": ["1", "2", "3", "4", "5"],
+        "version": "6.0.0",
+        "phases": ["1", "2", "3", "4", "5", "6"],
         "languages": ["python", "java", "c", "cpp", "javascript"],
         "execution_mode": os.environ.get("PVL_EXECUTION_MODE", "docker"),
         "sandbox_image": os.environ.get("PVL_SANDBOX_IMAGE", "programming-visual-lab-sandbox:latest"),
