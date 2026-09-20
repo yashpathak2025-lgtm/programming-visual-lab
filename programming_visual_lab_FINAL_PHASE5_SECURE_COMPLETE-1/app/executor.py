@@ -29,7 +29,24 @@ def snap(frame): return {k:clean(v) for k,v in frame.f_locals.items() if not k.s
 def emit(event,line,details=None,frame=None):
  if len(events)<MAX_EVENTS: events.append({'line':int(line or 1),'event':event,'variables':snap(frame) if frame else {},'details':details or {}})
 def visualize(label,data=None,kind='CUSTOM'):
- f=sys._getframe(1); emit('VISUAL',f.f_lineno,{'label':str(label),'data':clean(data),'kind':str(kind)},f)
+ f=sys._getframe(1)
+ d={'label':str(label),'data':clean(data),'kind':str(kind)}
+ # Preserve common DSA pointer metadata when the caller passes a dict.
+ if isinstance(data,dict):
+  for k in ('i','j','k','mid','lo','hi','top','front','rear','index','next','min','left','right'):
+   if k in data: d[k]=clean(data[k])
+ emit('VISUAL',f.f_lineno,d,f)
+
+def pvl_dsa_snapshot(frame):
+ d={}
+ for k,v in frame.f_locals.items():
+  if k in ('i','j','k','mid','lo','hi','top','front','rear','index','next','min','left','right') and isinstance(v,(int,float)):
+   d[k]=v
+ for name,val in frame.f_locals.items():
+  if isinstance(val,list) and len(val)<=100 and all(isinstance(x,(int,float,str,bool,type(None))) for x in val):
+   d.setdefault('array',clean(val)); d.setdefault('array_name',name); break
+ return d
+
 def pvl_trace_compare(line,left_src,right_src,op,result):
  f=sys._getframe(1)
  try:left=eval(left_src,{'__builtins__':SAFE,'visualize':visualize},f.f_locals)
@@ -39,10 +56,7 @@ def pvl_trace_compare(line,left_src,right_src,op,result):
  emit('COMPARE',line,{'left':clean(left),'right':clean(right),'operator':op,'result':bool(result),'left_src':left_src,'right_src':right_src},f); return result
 def pvl_emit_stmt(kind,line,details=None):
  f=sys._getframe(1); d=dict(details or {})
- # Snapshot the first small list after the statement so visualizations show real values.
- for name,val in f.f_locals.items():
-  if isinstance(val,list) and len(val)<=100 and all(isinstance(x,(int,float,str,bool,type(None))) for x in val):
-   d.setdefault('array',clean(val)); d.setdefault('array_name',name); break
+ d.update({k:v for k,v in pvl_dsa_snapshot(f).items() if k not in d})
  emit(kind,line,d,f)
 def tracer(frame,event,arg):
  if frame.f_code.co_filename!='user_code.py': return tracer
