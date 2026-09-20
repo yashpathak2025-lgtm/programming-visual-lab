@@ -14,6 +14,22 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 .right{display:flex;flex-direction:column;gap:12px;min-width:0}.card{padding:12px}.card .title{font-size:12px;text-transform:uppercase;color:#93a8c7;font-weight:800;margin-bottom:8px}.kv{display:grid;grid-template-columns:1fr auto;gap:5px;font:12px ui-monospace,monospace}.kv div{padding:4px 0;border-bottom:1px solid #172841}.timeline{display:flex;gap:3px;overflow:auto;padding:12px}.tick{min-width:28px;height:25px;border-radius:6px;background:#16263d;border:1px solid #2a4160;display:grid;place-items:center;font-size:10px}.tick.current{background:#385f91;border-color:#77a9ee}.tick.compare{border-color:#d4a53e}.explain{font-size:13px;line-height:1.55;color:#c8d5e8}.output{white-space:pre-wrap;background:#07101a;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,monospace;max-height:180px;overflow:auto}.tabs{display:flex;gap:4px;padding:7px;border-bottom:1px solid var(--line)}.tabs button{padding:7px 9px;font-size:11px;background:transparent}.tabs button.active{background:#1a3152}.hide{display:none}
 .modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:30;padding:20px}.modal.open{display:flex}.dialog{width:min(900px,100%);max-height:90vh;overflow:auto;background:#0d1a2c;border:1px solid #355075;border-radius:16px;box-shadow:0 30px 90px #000b}.dialog .body{padding:16px}.quiz-q{font-size:16px;font-weight:700;margin-bottom:12px}.option{display:block;width:100%;text-align:left;margin:7px 0}.option.correct{border-color:var(--accent2)}.option.wrong{border-color:var(--danger)}.progress{height:7px;background:#172840;border-radius:99px;overflow:hidden}.progress>i{display:block;height:100%;background:linear-gradient(90deg,#6ea8fe,#7ef0c5)}
 @media(max-width:1100px){.layout{grid-template-columns:220px 1fr}.right{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,1fr)}}@media(max-width:750px){header{height:auto;min-height:64px;flex-wrap:wrap;gap:8px;padding:10px}.layout{grid-template-columns:1fr}.sidebar{position:static;height:auto;min-height:0;max-height:260px}.right{grid-template-columns:1fr}.editor-wrap{min-height:360px}.code{min-height:360px}.tree{min-width:340px}}
+
+/* Phase 2 — VS Code style workspace */
+.vscode-shell{display:grid;grid-template-columns:190px 1fr;min-height:440px;background:#07101b}
+.vscode-explorer{border-right:1px solid #1b2b43;background:#091522;overflow:auto}
+.vscode-explorer .ex-head{padding:10px 12px;font-size:11px;font-weight:800;letter-spacing:.08em;color:#91a4c2;border-bottom:1px solid #1b2b43}
+.file-row{display:flex;align-items:center;gap:7px;padding:8px 10px;font:12px ui-monospace,monospace;color:#cbd8eb;cursor:pointer;border-left:2px solid transparent}
+.file-row:hover{background:#12233a}.file-row.active{background:#172b47;border-left-color:#6ea8fe}
+.file-actions{display:flex;gap:5px;padding:7px;border-bottom:1px solid #1b2b43}.file-actions button{flex:1;padding:5px 6px;font-size:11px}
+.editor-main{min-width:0;display:grid;grid-template-rows:36px 1fr}
+.vscode-tabs{display:flex;align-items:stretch;background:#091522;border-bottom:1px solid #1b2b43;overflow:auto}
+.vscode-tab{display:flex;align-items:center;gap:8px;padding:0 12px;border-right:1px solid #1b2b43;color:#8fa4c0;font:12px ui-monospace,monospace;cursor:pointer;white-space:nowrap}
+.vscode-tab.active{background:#0d1c30;color:#e8f0ff;border-top:2px solid #6ea8fe}
+.vscode-tab .close{opacity:.65}.vscode-tab .close:hover{opacity:1;color:#ff7b8b}
+.editor-status{display:flex;gap:14px;align-items:center;padding:5px 10px;border-top:1px solid #1b2b43;background:#091522;color:#7890ae;font:10px ui-monospace,monospace}
+.editor-main .editor-wrap{min-height:404px}
+@media(max-width:750px){.vscode-shell{grid-template-columns:145px 1fr}.file-row{font-size:11px}}
 </style></head>
 <body>
 <header><div class="brand"><div class="logo">PV</div><div class="owner-badge">Built by <b>Yash Pathak</b></div><div>Programming Visual Lab<div class="muted" style="font-size:10px">Code → Execution → Visual Animation → Explanation</div></div></div><div class="top-actions"><span id="progressPill" class="pill">Progress 0%</span><button id="themeBtn">☀/☾</button><button id="saveBtn">Save</button><button id="exportBtn">Export</button><button id="importBtn">Import</button><input id="importFile" type="file" accept="application/json" hidden></div></header>
@@ -138,4 +154,64 @@ $('#run').onclick=runCode;$('#next').onclick=nextStep;$('#prev').onclick=prevSte
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runCode()}else if(e.key==='ArrowRight')nextStep();else if(e.key==='ArrowLeft')prevStep();else if(e.code==='Space'&&document.activeElement!==$('#code')){e.preventDefault();autoPlay()}});
 $$('.tabs button').forEach(b=>b.onclick=()=>{$$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');['state','explain','output'].forEach(t=>$('#tab'+t[0].toUpperCase()+t.slice(1)).classList.toggle('hide',b.dataset.tab!==t))});
 const old=state.saved;if(old){$('#code').value=old.code;$('#language').value=old.language||'python'}else loadLesson('Bubble Sort','dsa');syncLines();renderLessons();updateProgress();
-</script></body></html>
+</script>
+<script>
+/* Phase 2 editor layer: browser-local files/tabs, new/rename/delete, dirty state. */
+(function(){
+ const editor=document.querySelector('#code');
+ const oldWrap=document.querySelector('.editor-wrap');
+ if(!editor||!oldWrap)return;
+ const host=oldWrap.parentElement;
+ const shell=document.createElement('div'); shell.className='vscode-shell';
+ const explorer=document.createElement('aside'); explorer.className='vscode-explorer';
+ explorer.innerHTML='<div class="ex-head">EXPLORER</div><div class="file-actions"><button id="pvlNewFile">+ File</button><button id="pvlResetFiles">Reset</button></div><div id="pvlFiles"></div>';
+ const main=document.createElement('div'); main.className='editor-main';
+ const tabs=document.createElement('div'); tabs.className='vscode-tabs'; tabs.id='pvlTabs';
+ const wrap=document.createElement('div'); wrap.className='editor-wrap';
+ oldWrap.replaceWith(shell); shell.append(explorer,main); main.append(tabs,wrap);
+ wrap.append(...oldWrap.children);
+ const status=document.createElement('div'); status.className='editor-status';
+ status.innerHTML='<span id="pvlFileState">Python</span><span id="pvlCursor">Ln 1, Col 1</span><span id="pvlDirty"></span><span style="margin-left:auto">UTF-8</span><span>Spaces: 4</span><span>Programming Visual Lab</span>';
+ main.append(status);
+ const KEY='pvl_editor_files_v2';
+ const defaults={ 'main.py': editor.value||'print("Hello Programming Visual Lab")' };
+ let files={}; try{files=JSON.parse(localStorage.getItem(KEY)||'null')||defaults}catch(e){files=defaults}
+ if(!files['main.py'])files['main.py']=defaults['main.py'];
+ let active=localStorage.getItem('pvl_active_file_v2')||'main.py', dirty=false;
+ function ext(f){return f.split('.').pop().toLowerCase()}
+ function icon(f){return {py:'🐍',java:'☕',js:'JS',html:'◇',css:'#',txt:'≡'}[ext(f)]||'•'}
+ function saveActive(){files[active]=editor.value;localStorage.setItem(KEY,JSON.stringify(files));dirty=false;render()}
+ function load(name){if(dirty)saveActive();active=name;editor.value=files[name]||'';localStorage.setItem('pvl_active_file_v2',active);dirty=false;syncLines();resetRun();render()}
+ function render(){
+  const list=document.querySelector('#pvlFiles'); list.innerHTML='';
+  Object.keys(files).forEach(n=>{const b=document.createElement('div');b.className='file-row '+(n===active?'active':'');b.innerHTML='<span>'+icon(n)+'</span><span>'+n+'</span>';b.onclick=()=>load(n);list.appendChild(b)});
+  tabs.innerHTML='';
+  Object.keys(files).forEach(n=>{if(n!==active)return;const t=document.createElement('div');t.className='vscode-tab active';t.innerHTML='<span>'+icon(n)+'</span><span>'+n+'</span><span class="close">×</span>';t.querySelector('.close').onclick=e=>{e.stopPropagation();deleteFile(n)};tabs.appendChild(t)});
+  document.querySelector('#pvlFileState').textContent=(ext(active)||'text').toUpperCase();
+  document.querySelector('#pvlDirty').textContent=dirty?'● Unsaved changes':'';
+ }
+ function newFile(){
+  let n=prompt('New file name','script.py'); if(!n)return;
+  n=n.trim().replace(/[^a-zA-Z0-9._-]/g,'_'); if(!n)return;
+  if(files[n]){alert('File already exists');return}
+  if(dirty)saveActive(); files[n]=ext(n)==='py'?'# New Python file\n':'';
+  active=n;localStorage.setItem(KEY,JSON.stringify(files));localStorage.setItem('pvl_active_file_v2',active);editor.value=files[n];dirty=false;syncLines();resetRun();render();
+ }
+ function deleteFile(n){
+  if(Object.keys(files).length<=1){alert('At least one file is required.');return}
+  if(!confirm('Delete '+n+'?'))return;
+  delete files[n];active=Object.keys(files)[0];editor.value=files[active];localStorage.setItem(KEY,JSON.stringify(files));localStorage.setItem('pvl_active_file_v2',active);dirty=false;syncLines();resetRun();render();
+ }
+ document.querySelector('#pvlNewFile').onclick=newFile;
+ document.querySelector('#pvlResetFiles').onclick=()=>{if(confirm('Reset editor files?')){files={...defaults};active='main.py';editor.value=files[active];localStorage.setItem(KEY,JSON.stringify(files));localStorage.setItem('pvl_active_file_v2',active);dirty=false;syncLines();resetRun();render()}};
+ editor.addEventListener('input',()=>{dirty=true;document.querySelector('#pvlDirty').textContent='● Unsaved changes';});
+ editor.addEventListener('keydown',e=>{
+   if(e.key==='Tab'){e.preventDefault();const s=editor.selectionStart;editor.value=editor.value.slice(0,s)+'    '+editor.value.slice(editor.selectionEnd);editor.selectionStart=editor.selectionEnd=s+4;dirty=true}
+   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();saveActive();document.querySelector('#runState').textContent='File saved'}
+ });
+ editor.addEventListener('keyup',()=>{const before=editor.value.slice(0,editor.selectionStart).split('\n');document.querySelector('#pvlCursor').textContent='Ln '+before.length+', Col '+(before[before.length-1].length+1)});
+ render();
+ window.pvlEditor={saveActive,getFiles:()=>({...files}),active:()=>active};
+})();
+</script>
+</body></html>
