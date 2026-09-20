@@ -12,7 +12,7 @@ MAX_EVENTS = 3500
 MAX_OUTPUT = 16000
 MAX_CODE = 24000
 BLOCKED = {
-    '__import__','open','exec','eval','compile','input','breakpoint','globals','locals','vars','dir','help','quit','exit',
+    '__import__','open','exec','eval','compile','breakpoint','globals','locals','vars','dir','help','quit','exit',
     'memoryview','getattr','setattr','delattr'
 }
 
@@ -107,14 +107,14 @@ def limits():
         resource.setrlimit(resource.RLIMIT_CPU,(4,5)); resource.setrlimit(resource.RLIMIT_FSIZE,(3*1024*1024,3*1024*1024)); resource.setrlimit(resource.RLIMIT_NOFILE,(32,32))
     except Exception: pass
 
-def execute_python(code,timeout_ms=4000):
+def execute_python(code,timeout_ms=4000,stdin_text=''):
     try: validate_python(code)
     except Exception as e: return {'ok':False,'language':'python','events':[],'stdout':'','error':'ValidationError: '+str(e),'source_lines':code.splitlines()}
     runner=PY_RUNNER.replace('__SOURCE__',repr(code)).replace('__MAX_EVENTS__',str(MAX_EVENTS)).replace('__MAX_OUTPUT__',str(MAX_OUTPUT)).replace('__BLOCKED__',repr(BLOCKED))
     with tempfile.TemporaryDirectory(prefix='pvl_py_') as td:
         p=Path(td)/'runner.py'; p.write_text(runner,encoding='utf8')
         env={'PYTHONIOENCODING':'utf-8','PATH':os.environ.get('PATH','')}
-        try: r=subprocess.run([sys.executable,str(p)],cwd=td,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout_ms/1000,env=env,preexec_fn=limits if os.name!='nt' else None)
+        try: r=subprocess.run([sys.executable,str(p)],cwd=td,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,input=stdin_text[:8000],timeout=timeout_ms/1000,env=env,preexec_fn=limits if os.name!='nt' else None)
         except subprocess.TimeoutExpired: return {'ok':False,'language':'python','events':[],'stdout':'','error':'Timeout: execution exceeded the limit.','source_lines':code.splitlines()}
         lines=r.stdout.strip().splitlines()
         if not lines:return {'ok':False,'language':'python','events':[],'stdout':r.stderr[-MAX_OUTPUT:],'error':'Runner produced no result.','source_lines':code.splitlines()}
@@ -166,7 +166,7 @@ def _parse_java_events(stderr):
         return json.loads(m.group(1))
     except Exception:return []
 
-def execute_java(code,timeout_ms=5000):
+def execute_java(code,timeout_ms=5000,stdin_text=''):
     try: instrumented=_java_instrument(code)
     except Exception as e:return {'ok':False,'language':'java','events':[],'stdout':'','error':'ValidationError: '+str(e),'source_lines':code.splitlines()}
     with tempfile.TemporaryDirectory(prefix='pvl_java_') as td:
@@ -177,7 +177,7 @@ def execute_java(code,timeout_ms=5000):
         except subprocess.TimeoutExpired:return {'ok':False,'language':'java','events':[],'stdout':'','error':'Java compile timeout','source_lines':code.splitlines()}
         if c.returncode!=0:return {'ok':False,'language':'java','events':[],'stdout':c.stdout,'error':'JavaCompileError: '+c.stderr[-6000:],'source_lines':code.splitlines()}
         try:
-            r=subprocess.run(['java','-Xmx128m','-Xss512k','-Djava.awt.headless=true','Main'],cwd=td,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout_ms/1000,env=env)
+            r=subprocess.run(['java','-Xmx128m','-Xss512k','-Djava.awt.headless=true','Main'],cwd=td,input=stdin_text[:8000],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout_ms/1000,env=env)
         except subprocess.TimeoutExpired:return {'ok':False,'language':'java','events':[],'stdout':'','error':'Timeout: Java execution exceeded the limit.','source_lines':code.splitlines()}
         events=_parse_java_events(r.stderr)
         stdout=r.stdout[:MAX_OUTPUT]
@@ -185,15 +185,15 @@ def execute_java(code,timeout_ms=5000):
             return {'ok':False,'language':'java','events':events,'stdout':stdout,'error':'JavaRuntimeError: '+r.stderr.split('PVL_EVENTS:')[0][-5000:],'source_lines':code.splitlines()}
         return {'ok':True,'language':'java','events':events,'stdout':stdout,'source_lines':code.splitlines()}
 
-def execute_local(code,language='python',timeout_ms=4000):
+def execute_local(code,language='python',timeout_ms=4000,stdin_text=''):
     """Execute inside the trusted local runner process (used only inside the sandbox container)."""
     language=language.lower().strip()
-    if language=='python': return execute_python(code,timeout_ms)
-    if language=='java': return execute_java(code,timeout_ms)
+    if language=='python': return execute_python(code,timeout_ms,stdin_text)
+    if language=='java': return execute_java(code,timeout_ms,stdin_text)
     return {'ok':False,'language':language,'events':[],'stdout':'','error':'Unsupported language','source_lines':code.splitlines()}
 
 
-def _docker_execute(code, language, timeout_ms):
+def _docker_execute(code, language, timeout_ms, stdin_text=''):
     """Fail-closed Docker execution manager for untrusted code.
 
     The host never executes user code when Docker mode is active. Code is sent over
@@ -204,7 +204,7 @@ def _docker_execute(code, language, timeout_ms):
     docker=os.environ.get('PVL_DOCKER_BIN','docker')
     if not shutil.which(docker):
         return {'ok':False,'language':language,'events':[],'stdout':'','error':'SandboxUnavailable: Docker is required in secure mode. Start Docker Desktop/Engine and build the sandbox image, or explicitly use PVL_EXECUTION_MODE=local for trusted local development.','source_lines':code.splitlines()}
-    request=json.dumps({'code':code,'language':language,'timeout_ms':timeout_ms},ensure_ascii=False)
+    request=json.dumps({'code':code,'language':language,'timeout_ms':timeout_ms,'stdin':stdin_text[:8000]},ensure_ascii=False)
     # All hardening flags are intentionally explicit here. No host filesystem or
     # Docker socket is mounted into the container.
     cmd=[docker,'run','--rm','-i',
@@ -244,10 +244,10 @@ def _docker_execute(code, language, timeout_ms):
     return result
 
 
-def execute(code,language='python',timeout_ms=4000):
+def execute(code,language='python',timeout_ms=4000,stdin_text=''):
     mode=os.environ.get('PVL_EXECUTION_MODE','docker').lower().strip()
     if os.environ.get('PVL_IN_SANDBOX')=='1' or mode=='local':
-        return execute_local(code,language,timeout_ms)
+        return execute_local(code,language,timeout_ms,stdin_text)
     if mode=='docker':
-        return _docker_execute(code,language,timeout_ms)
+        return _docker_execute(code,language,timeout_ms,stdin_text)
     return {'ok':False,'language':language,'events':[],'stdout':'','error':f'Invalid PVL_EXECUTION_MODE: {mode}. Use docker or local.','source_lines':code.splitlines()}
