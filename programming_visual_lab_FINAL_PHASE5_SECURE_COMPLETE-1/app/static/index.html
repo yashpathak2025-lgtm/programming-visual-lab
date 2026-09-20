@@ -30,6 +30,17 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 .editor-status{display:flex;gap:14px;align-items:center;padding:5px 10px;border-top:1px solid #1b2b43;background:#091522;color:#7890ae;font:10px ui-monospace,monospace}
 .editor-main .editor-wrap{min-height:404px}
 @media(max-width:750px){.vscode-shell{grid-template-columns:145px 1fr}.file-row{font-size:11px}}
+
+/* Phase 2B — IDE polish */
+.editor-main{position:relative}.codebox{position:relative}
+.editor-main .editor-wrap{grid-template-columns:48px 1fr}
+.gutter{padding-top:14px;line-height:1.65}
+.gutter .ln-active{color:#dce8fb;font-weight:700}
+.ide-terminal{border-top:1px solid #223553;background:#060d17;min-height:130px;max-height:220px;display:flex;flex-direction:column}
+.ide-terminal-head{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #1b2b43;font-size:11px;color:#91a4c2}
+.ide-terminal-head button{padding:4px 8px;font-size:10px;margin-left:auto}
+.ide-terminal-body{padding:9px 11px;overflow:auto;white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#cbd8eb}
+.run-stop{display:flex;gap:5px}
 </style></head>
 <body>
 <header><div class="brand"><div class="logo">PV</div><div class="owner-badge">Built by <b>Yash Pathak</b></div><div>Programming Visual Lab<div class="muted" style="font-size:10px">Code → Execution → Visual Animation → Explanation</div></div></div><div class="top-actions"><span id="progressPill" class="pill">Progress 0%</span><button id="themeBtn">☀/☾</button><button id="saveBtn">Save</button><button id="exportBtn">Export</button><button id="importBtn">Import</button><input id="importFile" type="file" accept="application/json" hidden></div></header>
@@ -212,6 +223,25 @@ const old=state.saved;if(old){$('#code').value=old.code;$('#language').value=old
  editor.addEventListener('keyup',()=>{const before=editor.value.slice(0,editor.selectionStart).split('\n');document.querySelector('#pvlCursor').textContent='Ln '+before.length+', Col '+(before[before.length-1].length+1)});
  render();
  window.pvlEditor={saveActive,getFiles:()=>({...files}),active:()=>active};
+})();
+</script>
+
+<script>
+(function(){
+ const code=document.querySelector('#code'), gutter=document.querySelector('#gutter'), wrap=document.querySelector('.editor-main');
+ if(!code||!gutter||!wrap)return;
+ function lines(){const n=Math.max(1,code.value.split('\n').length);gutter.innerHTML=Array.from({length:n},(_,i)=>'<div data-ln="'+(i+1)+'">'+(i+1)+'</div>').join('');}
+ function activeLine(){const before=code.value.slice(0,code.selectionStart);const n=before.split('\n').length;gutter.querySelectorAll('div').forEach(x=>x.classList.toggle('ln-active',+x.dataset.ln===n));}
+ function sync(){lines();activeLine();}
+ code.addEventListener('input',sync); code.addEventListener('click',activeLine); code.addEventListener('keyup',activeLine); sync();
+ const term=document.createElement('section');term.className='ide-terminal';term.innerHTML='<div class="ide-terminal-head"><b>TERMINAL</b><span id="pvlTermStatus">Ready</span><button id="pvlClearTerm">Clear</button></div><div id="pvlTerm" class="ide-terminal-body">Programming Visual Lab terminal ready.\nPress Run to execute your program.</div>';
+ const editorMain=document.querySelector('.editor-main'); editorMain.appendChild(term);
+ const out=document.querySelector('#output'), t=document.querySelector('#pvlTerm');
+ function mirror(){if(out)t.textContent=out.textContent||'No output.';}
+ document.querySelector('#pvlClearTerm').onclick=()=>t.textContent='';
+ const obs=new MutationObserver(mirror); if(out)obs.observe(out,{childList:true,subtree:true,characterData:true});
+ mirror();
+ window.addEventListener('pvl:execution-start',()=>{document.querySelector('#pvlTermStatus').textContent='Running';t.textContent+='\n$ '+(document.querySelector('#language').value||'python')+' '+(window.pvlEditor?.active?.()||'main.py')+'\n';});
 })();
 </script>
 </body></html>
