@@ -4,7 +4,7 @@ import os
 import urllib.error
 import urllib.request
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -39,11 +39,19 @@ def health():
         "languages": ["python", "java", "c", "cpp", "javascript"],
         "execution_mode": os.environ.get("PVL_EXECUTION_MODE", "docker"),
         "sandbox_image": os.environ.get("PVL_SANDBOX_IMAGE", "programming-visual-lab-sandbox:latest"),
+        "status": "ok",
+        "execution_modes": ["docker", "local"],
     }
 
 @app.post("/api/run")
 def run(req: RunRequest):
-    return execute(req.code, req.language, req.timeout_ms, req.stdin)
+    try:
+        return execute(req.code, req.language, req.timeout_ms, req.stdin)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        # Keep implementation details out of normal API responses.
+        raise HTTPException(status_code=500, detail="Execution service error")
 
 class AIRequest(BaseModel):
     action: str = Field(pattern=r"^(generate|explain|debug|fix|optimize|tests|hint)$")
