@@ -15,32 +15,26 @@ function patchRun(){
   const b=q('#run');
   if(!b||b.dataset.pvlInputBridge) return;
   b.dataset.pvlInputBridge='1';
-  const runWithInput=async(e)=>{e.preventDefault();e.stopImmediatePropagation();
-    if(typeof stopPlay==='function') stopPlay();
-    q('#runState').textContent='Running…';
-    state.events=[];state.step=-1;
-    if(typeof renderTimeline==='function') renderTimeline();
-    try{
-      const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:q('#code').value,language:q('#language').value,timeout_ms:5000,stdin:q('#pvlStdin')?.value||''})});
-      const res=await r.json();state.result=res;state.events=res.events||[];
-      if(typeof renderOutput==='function') renderOutput(res);
-      q('#eventCount').textContent=state.events.length+' events';
-      if(res.ok){
-        q('#runState').textContent='Execution ready';
-        if(state.current){state.completed.add(state.current.group+':'+state.current.name);if(typeof persistProgress==='function')persistProgress();if(typeof renderLessons==='function')renderLessons();}
-        if(state.current&&typeof nextStep==='function') nextStep();
-      }else{
-        q('#runState').textContent='Execution error';
-        q('#explain').innerHTML='<b>Error:</b> '+esc(res.error||'Unknown error')+'<br><br>'+esc(res.traceback||'');
-        if(typeof drawMessage==='function') drawMessage('Execution stopped',res.error||'Unknown error');
-      }
-    }catch(err){
-      q('#runState').textContent='Network error';
-      if(typeof drawMessage==='function') drawMessage('Server error',err.message);
+
+  // The main application owns execution. This bridge only exposes stdin and
+  // supplies it to the existing runCode() function, avoiding a second /api/run
+  // request and eliminating the previous competing capture-phase listener.
+  const original=window.runCode;
+  if(typeof original!=='function') return;
+  window.runCode=async function(){
+    const input=q('#pvlStdin');
+    if(input){
+      window.pvlPendingStdin=input.value||'';
+      q('#pvlInputStatus').textContent='Input ready';
     }
+    return original.apply(this,arguments);
   };
-  b.addEventListener('click',runWithInput,true);
-  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();runWithInput(e)}},true);
+  window.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&document.activeElement!==b){
+      e.preventDefault();
+      b.click();
+    }
+  });
 }
 function boot(){initInputBridge();patchRun()}
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
