@@ -53,6 +53,9 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 @keyframes pvlSwapRight{0%{transform:translateX(0)}45%{transform:translateX(-28px) translateY(8px) scale(1.08)}100%{transform:translateX(0)}}
 
 #vizPointerBar{margin:12px auto 0;padding:9px 14px;text-align:center;border-radius:10px;font-family:monospace;opacity:.72;min-height:18px;transition:transform .25s ease,opacity .25s ease}#vizPointerBar.has-pointers{opacity:1;transform:translateY(-2px)}.timeline-step{cursor:pointer;transition:transform .18s ease}.timeline-step:hover{transform:translateY(-2px)}.timeline-step.current{outline:2px solid currentColor}
+
+/* Phase 4H — playback controls */
+#stepBack{cursor:pointer}.viz-playback{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.viz-playback button{min-height:34px}
 </style></head>
 <body>
 <header><div class="brand"><div class="logo">PV</div><div class="owner-badge">Built by <b>Yash Pathak</b></div><div>Programming Visual Lab<div class="muted" style="font-size:10px">Code → Execution → Visual Animation → Explanation</div></div></div><div class="top-actions"><span id="progressPill" class="pill">Progress 0%</span><button id="themeBtn">☀/☾</button><button id="saveBtn">Save</button><button id="exportBtn">Export</button><button id="importBtn">Import</button><input id="importFile" type="file" accept="application/json" hidden></div></header>
@@ -67,7 +70,7 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 <option value="javascript">JavaScript</option>
 <option value="html">HTML</option>
 <option value="css">CSS</option>
-</select><button class="primary" id="run">▶ Run</button><button id="prev">← Previous</button><button id="next">Next Step →</button><button id="play">▶ Auto Play</button><button id="restart">↺ Restart</button><button id="clear">Clear</button><select id="speed"><option value="1200">0.25×</option><option value="800">0.5×</option><option value="450" selected>1×</option><option value="260">1.5×</option><option value="130">2×</option></select><label class="pill"><input type="checkbox" id="beginner" checked> Beginner</label><span class="grow"></span><span id="runState" class="pill">Ready</span></div>
+</select><button class="primary" id="run">▶ Run</button><button id="prev">← Previous</button><button id="next">Next Step →</button><button id="play"><button id="stepBack" title="Previous execution step">⏮ Back</button>▶ Auto Play</button><button id="restart">↺ Restart</button><button id="clear">Clear</button><select id="speed"><span id="speedLabel" class="viz-sub" style="margin-left:8px">1.0×</span><option value="1200">0.25×</option><option value="800">0.5×</option><option value="450" selected>1×</option><option value="260">1.5×</option><option value="130">2×</option></select><label class="pill"><input type="checkbox" id="beginner" checked> Beginner</label><span class="grow"></span><span id="runState" class="pill">Ready</span></div>
 <div class="panel"><div class="editor-wrap"><div class="gutter" id="gutter">1</div><div class="codebox"><div id="highlight" class="highlight" style="top:14px"></div><textarea id="code" class="code" spellcheck="false"></textarea></div></div><div class="statusbar"><span id="lineStatus">Line —</span><span id="eventStatus">Event —</span><span id="eventCount">0 events</span><span class="grow"></span><span class="muted">Tip: use visualize(label, data, kind) for custom DSA views.</span></div></div>
 <div class="panel stage"><div class="stage-head"><div><div class="viz-title" id="vizTitle">Execution Visualizer</div><div class="viz-sub" id="vizSub">Run code to generate real execution events.</div></div><span id="stepBadge" class="pill">START</span></div><div id="viz" class="viz"><div class="message"><b>Your code becomes a moving lesson.</b><p>Every Next Step advances through execution events. The code line, variables, visual state and explanation stay synchronized.</p></div></div></div>
 </main>
@@ -213,8 +216,17 @@ async function runCode(){stopPlay();$('#runState').textContent='Running…';stat
 function nextStep(){if(state.step+1>=state.events.length){state.step=state.events.length;$('#stepBadge').textContent='DONE';$('#runState').textContent='Done';renderTimeline();return}state.step++;renderEvent(state.events[state.step])}
 function prevStep(){if(state.step<=0){state.step=-1;$('#stepBadge').textContent='START';renderTimeline();return}state.step--;renderEvent(state.events[state.step])}
 function resetRun(){stopPlay();state.events=[];state.step=-1;$('#eventCount').textContent='0 events';$('#stepBadge').textContent='START';$('#runState').textContent='Ready';renderTimeline();drawMessage('Ready','Run the program to generate execution events.')}
-function stopPlay(){state.playing=false;$('#play').textContent='▶ Auto Play';clearTimeout(state.timer)}
-function autoPlay(){if(state.playing){stopPlay();return}state.playing=true;$('#play').textContent='⏸ Pause';const tick=()=>{if(!state.playing)return;if(state.step+1>=state.events.length){stopPlay();return}nextStep();state.timer=setTimeout(tick,Number($('#speed').value))};tick()}
+function stopPlay(){state.playing=false;$('#play').textContent='▶ Play';clearTimeout(state.timer)}
+function autoPlay(){
+ if(state.playing){stopPlay();return}
+ if(!state.events.length){return}
+ state.playing=true;$('#play').textContent='⏸ Pause';
+ const tick=()=>{if(!state.playing)return;if(state.step+1>=state.events.length){stopPlay();return}nextStep();state.timer=setTimeout(tick,Number($('#speed').value))}
+ tick()
+}
+function pvlStepBack(){prevStep()}
+function pvlSetSpeed(v){$('#speedLabel')&&($('#speedLabel').textContent=(1000/Number(v)).toFixed(1)+'×')}
+
 function persistProgress(){localStorage.setItem('pvl_completed',JSON.stringify([...state.completed]));updateProgress()}
 function updateProgress(){const total=Object.keys(PY).length+Object.keys(JAVA).length;const pct=Math.round(state.completed.size/total*100);$('#progressPill').textContent='Progress '+pct+'%';$('#progressBar').style.width=pct+'%';$('#progressText').textContent=`${state.completed.size} lessons completed · ${total} lessons available`}
 function saveCode(){const saved={language:$('#language').value,code:$('#code').value,at:new Date().toISOString()};localStorage.setItem('pvl_saved',JSON.stringify(saved));$('#runState').textContent='Saved locally'}
@@ -410,3 +422,6 @@ const old=state.saved;if(old){$('#code').value=old.code;$('#language').value=old
 })();
 </script>
 </body></html>
+
+// Phase 4H playback wiring
+$('#stepBack')?.addEventListener('click',pvlStepBack);$('#speed')?.addEventListener('input',e=>pvlSetSpeed(e.target.value));pvlSetSpeed($('#speed')?.value||1000);
