@@ -4,6 +4,9 @@ __pycache__
 .git
 *.zip
 README.md
+Dockerfile
+Dockerfile.render
+Dockerfile.sandbox
 FINAL_AUDIT.md
 tests
 start.sh

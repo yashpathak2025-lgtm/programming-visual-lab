@@ -90,7 +90,7 @@ class Guard(ast.NodeTransformer):
    subs=[x for x in node.targets[0].elts if isinstance(x,ast.Subscript)]
    if len(subs)==2:
     details={'label':'swap','left_src':ast.unparse(subs[0]),'right_src':ast.unparse(subs[1])}
-  mark=ast.Expr(ast.Call(func=ast.Name(id='pvl_emit_stmt',ctx=ast.Load()),args=[ast.Constant(event),ast.Constant(node.lineno),ast.Constant(details)],keywords=[]))
+  mark=ast.Expr(ast.Call(func=ast.Name(id='pvl_emit_stmt',ctx=ast.Load()),args=[ast.Constant(event),ast.Constant(node.lineno),ast.parse(repr(details), mode='eval').body],keywords=[]))
   return [node,ast.copy_location(mark,node)]
  def visit_AnnAssign(self,node):
   node=self.generic_visit(node); mark=ast.Expr(ast.Call(func=ast.Name(id='pvl_emit_stmt',ctx=ast.Load()),args=[ast.Constant('ASSIGN'),ast.Constant(node.lineno)],keywords=[])); return [node,ast.copy_location(mark,node)]
@@ -234,6 +234,41 @@ def _parse_line_markers(stderr):
         if m and len(events)<MAX_EVENTS:
             events.append({'line':int(m.group(1)),'event':'LINE','variables':{},'details':{}})
     return events
+
+def _instrument_c_family(code,language):
+    """Add conservative real line markers only inside function bodies.
+
+    The previous implementation prefixed every non-preprocessor source line, which
+    can turn declarations/control-flow syntax into invalid C/C++. This version only
+    inserts markers after an opening function brace or before ordinary semicolon
+    statements while tracking brace depth.
+    """
+    if len(code) > MAX_CODE:
+        raise ValueError(f'code exceeds {MAX_CODE} characters')
+    if language not in ('c','cpp'):
+        raise ValueError('unsupported C-family language')
+    if re.search(r'\b(system|popen|fork|execve|execl|CreateProcess|WinExec)\s*\(', code):
+        raise ValueError('restricted process API detected')
+    if re.search(r'#\s*(include|pragma)\s*[<"]\s*(unistd|sys/socket|sys/ptrace|windows\.h)', code, re.I):
+        raise ValueError('restricted system header detected')
+    lines=code.splitlines(); out=[]; depth=0
+    control=re.compile(r'^(if|else|for|while|switch|case|default|do|try|catch)\b')
+    for i,line in enumerate(lines,1):
+        s=line.strip()
+        if not s or s.startswith('#') or s.startswith('//') or s.startswith('/*') or s.startswith('*'):
+            out.append(line); continue
+        if depth==0 and '{' in line and re.search(r'\)\s*\{', line):
+            pos=line.find('{')+1
+            line=line[:pos]+f' fprintf(stderr,"PVL_LINE:{i}\\n");'+line[pos:]
+            out.append(line)
+        elif depth>0 and s.endswith(';') and not control.match(s):
+            indent=line[:len(line)-len(line.lstrip())]
+            out.append(f'{indent}fprintf(stderr,"PVL_LINE:{i}\\n"); {s}')
+        else:
+            out.append(line)
+        depth += line.count('{')-line.count('}')
+        depth=max(0,depth)
+    return '\n'.join(out)
 
 def execute_c(code,timeout_ms=5000,stdin_text=''):
     try: src=_instrument_c_family(code,'c')
