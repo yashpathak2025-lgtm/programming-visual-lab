@@ -235,6 +235,28 @@ def _parse_line_markers(stderr):
             events.append({'line':int(m.group(1)),'event':'LINE','variables':{},'details':{}})
     return events
 
+def _instrument_c_family(code,language):
+    """Add stderr execution markers without changing stdout or requiring user hooks."""
+    if len(code) > MAX_CODE:
+        raise ValueError(f'code exceeds {MAX_CODE} characters')
+    if language not in ('c','cpp'):
+        raise ValueError('unsupported C-family language')
+    if re.search(r'\\b(system|popen|fork|execve|execl|CreateProcess|WinExec)\\s*\\(', code):
+        raise ValueError('restricted process API detected')
+    if re.search(r'#\\s*(include|pragma)\\s*[<"]\\s*(unistd|sys/socket|sys/ptrace|windows\\.h)', code, re.I):
+        raise ValueError('restricted system header detected')
+    lines=code.splitlines()
+    out=[]
+    for i,line in enumerate(lines,1):
+        s=line.strip()
+        if not s or s.startswith('#'):
+            out.append(line)
+            continue
+        # Emit a marker before the original source line. This is deliberately
+        # lightweight: it preserves the real program's stdout and data flow.
+        out.append(f'fprintf(stderr,"PVL_LINE:{i}\\\\n"); {line}')
+    return '\\n'.join(out)
+
 def execute_c(code,timeout_ms=5000,stdin_text=''):
     try: src=_instrument_c_family(code,'c')
     except Exception as e:return {'ok':False,'language':'c','events':[],'stdout':'','error':'ValidationError: '+str(e),'source_lines':code.splitlines()}
