@@ -4,7 +4,7 @@ import os
 import urllib.error
 import urllib.request
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -46,7 +46,15 @@ def health():
 @app.post("/api/run")
 def run(req: RunRequest):
     try:
-        return execute(req.code, req.language, req.timeout_ms, req.stdin)
+        result = execute(req.code, req.language, req.timeout_ms, req.stdin)
+        # Keep the response contract stable for every language and every error path.
+        result.setdefault("ok", False)
+        result.setdefault("language", req.language)
+        result.setdefault("stdout", "")
+        result.setdefault("error", "")
+        result.setdefault("events", [])
+        result.setdefault("source_lines", req.code.splitlines())
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception:
