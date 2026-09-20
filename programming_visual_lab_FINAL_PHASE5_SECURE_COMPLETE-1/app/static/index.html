@@ -56,6 +56,9 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 
 /* Phase 4H — playback controls */
 #stepBack{cursor:pointer}.viz-playback{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.viz-playback button{min-height:34px}
+
+/* Phase 4I — algorithm-specific visual states */
+.active-node{animation:pvlNodePulse .7s ease-in-out infinite alternate}.nodes{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.arrow{font-size:24px;opacity:.7}@keyframes pvlNodePulse{from{transform:translateY(0) scale(1)}to{transform:translateY(-7px) scale(1.08)}}
 </style></head>
 <body>
 <header><div class="brand"><div class="logo">PV</div><div class="owner-badge">Built by <b>Yash Pathak</b></div><div>Programming Visual Lab<div class="muted" style="font-size:10px">Code → Execution → Visual Animation → Explanation</div></div></div><div class="top-actions"><span id="progressPill" class="pill">Progress 0%</span><button id="themeBtn">☀/☾</button><button id="saveBtn">Save</button><button id="exportBtn">Export</button><button id="importBtn">Import</button><input id="importFile" type="file" accept="application/json" hidden></div></header>
@@ -159,7 +162,8 @@ function op(x){return ({Eq:'==',NotEq:'!=',Lt:'<',LtE:'<=',Gt:'>',GtE:'>=',In:'i
 function esc(x){return String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')}
 function renderVars(v){let keys=Object.keys(v);$('#vars').innerHTML=keys.length?keys.map(k=>`<div>${esc(k)}</div><div>${esc(typeof v[k]==='string'?v[k]:JSON.stringify(v[k]))}</div>`).join(''):`<div class="muted">No captured locals</div><div></div>`}
 function findVisualData(e){const d=e.details||{};let data=d.data,kind=(d.kind||'CUSTOM').toUpperCase();if(data==null&&e.variables){const keys=Object.keys(e.variables);const arrKey=keys.find(k=>Array.isArray(e.variables[k])&&e.variables[k].length<=100);if(arrKey){data={array:e.variables[arrKey]};if(Number.isInteger(d.j))data.j=d.j;if(Number.isInteger(d.index))data.index=d.index;if(Number.isInteger(d.mid))data.mid=d.mid;if(Number.isInteger(d.lo))data.lo=d.lo;if(Number.isInteger(d.hi))data.hi=d.hi;if(Number.isInteger(d.next))data.next=d.next;kind='ARRAY'}}return {data,kind,label:d.label||eventLabel(e)}}
-function renderVisual(e){const x=findVisualData(e),d=x.data;let kind=x.kind;if((e.event==='COMPARE'||e.event==='SWAP'||e.event==='ASSIGN')&&d&&d.array)return drawStateObject(d,kind);if(kind==='TWO_POINTER')return drawStateObject(d,kind);if(d&&typeof d==='object'&&!Array.isArray(d)){if(d.array)kind=kind==='CUSTOM'?'ARRAY':kind; if(d.queue)kind='QUEUE';if(d.stack)kind='STACK'}if(Array.isArray(d)){if(kind.includes('STACK'))return drawArray(d,'stack');if(kind.includes('QUEUE'))return drawArray(d,'queue');return drawArray(d)}if(kind==='ARRAY'||kind==='BUBBLE'||kind==='SELECTION'||kind==='INSERTION'||kind==='HEAP'||kind==='MERGE'||kind==='QUICK'||kind==='BINARY')return drawStateObject(d,kind);if(kind==='LINKED_LIST')return drawNodes(d);if(kind==='STACK')return drawArray(d?.stack||d,'stack');if(kind==='QUEUE')return drawArray(d?.queue||d,'queue');if(['BFS','DFS'].includes(kind))return drawGraph(d,kind);if(kind==='BST')return drawTree(d);if(kind==='RECURSION')return drawRecursion(d);if(kind==='ERROR')return drawMessage(x.label,JSON.stringify(d));return drawMessage(x.label,typeof d==='string'?d:JSON.stringify(d,null,2))}
+function renderVisual(e){const x=findVisualData(e),d=x.data;let kind=x.kind.toUpperCase();if(d&&typeof d==='object'&&!Array.isArray(d)){if(d.array)kind=kind==='CUSTOM'?'ARRAY':kind;if(d.queue)kind='QUEUE';if(d.stack)kind='STACK'}if((e.event==='COMPARE'||e.event==='SWAP'||e.event==='ASSIGN')&&d?.array)return drawStateObject(d,kind);if(kind==='LINKED_LIST')return drawNodes(d);if(kind==='STACK'||kind==='QUEUE')return drawStackQueue(d,kind);if(Array.isArray(d))return drawArray(d,kind);if(['ARRAY','BUBBLE','SELECTION','INSERTION','HEAP','MERGE','QUICK','BINARY','TWO_POINTER'].includes(kind))return drawStateObject(d,kind);if(['BFS','DFS'].includes(kind))return drawGraph(d,kind);if(kind==='BST')return drawTree(d);if(kind==='RECURSION')return drawRecursion(d);if(kind==='ERROR')return drawMessage(x.label,JSON.stringify(d));return drawMessage(x.label,typeof d==='string'?d:JSON.stringify(d,null,2))}
+
 function drawArray(a,cls=''){if(!Array.isArray(a))a=[];const ev=state.events[state.step],label=ev?.details?.label||'';const isSwap=/swap/i.test(label)||ev?.event==='SWAP';const j=Number.isInteger(ev?.details?.j)?ev.details.j:activeIndex();$('#viz').innerHTML=`<div class="${cls||'array'}">${a.map((v,i)=>{const motion=isSwap?(i===j?'swap-left':i===j+1?'swap-right':''):'';return `<div class="cell ${i===activeIndex()?'active ':''}${motion}" style="animation-delay:${Math.min(i*45,450)}ms"><span class="idx">${i}</span>${esc(JSON.stringify(v))}</div>`}).join('')}</div>`}
 function activeIndex(){let e=state.events[state.step];let d=e?.details||{};return Number.isInteger(d.j)?d.j:Number.isInteger(d.index)?d.index:Number.isInteger(d.mid)?d.mid:-1}
 function drawStateObject(d,kind){
@@ -194,7 +198,16 @@ function drawStateObject(d,kind){
   </div>`
 }
 
-function drawNodes(d){let a=Array.isArray(d)?d:(d?.values||d?.list||[]);$('#viz').innerHTML=`<div class="nodes">${a.map((v,i)=>`<div class="node">${esc(v)}<small class="muted" style="display:block">node ${i}</small></div>${i<a.length-1?'<span class="arrow">→</span>':''}`).join('')}</div>`}
+function drawNodes(d){
+ let a=Array.isArray(d)?d:(d?.values||d?.list||[]);
+ const active=Number.isInteger(d?.index)?d.index:Number.isInteger(d?.next)?d.next:-1;
+ $('#viz').innerHTML=`<div class="nodes">${a.map((v,i)=>`<div class="node ${i===active?'active-node':''}">${esc(v)}<small class="muted" style="display:block">node ${i}</small></div>${i<a.length-1?'<span class="arrow">→</span>':''}`).join('')}</div>`
+}
+function drawStackQueue(d,kind){
+ const a=Array.isArray(d)?d:(d?.[kind.toLowerCase()]||d?.array||[]);
+ const pointer=kind==='STACK'?d?.top:d?.front;
+ $('#viz').innerHTML=`<div class="message"><b>${kind}</b><div class="array">${a.map((v,i)=>`<div class="cell ${i===pointer?'active':''}"><span class="idx">${i}</span>${esc(JSON.stringify(v))}</div>`).join('')}</div><p class="viz-sub">${pointer!==undefined?esc((kind==='STACK'?'TOP':'FRONT')+' = '+pointer):''}</p></div>`
+}
 function drawGraph(d,kind){const node=d?.node||d?.current||'?';const seen=d?.seen||d?.visited||[];$('#viz').innerHTML=`<div class="message"><b>${kind}: ${esc(node)}</b><p>Visited: <code>${esc(JSON.stringify(seen))}</code></p><p>Each node is processed once when it enters the traversal state.</p></div>`}
 function drawTree(d){const n=d?.node||d?.value||'?';$('#viz').innerHTML=`<div class="tree"><svg><line x1="50%" y1="45" x2="35%" y2="125" stroke="#426083"/><line x1="50%" y1="45" x2="65%" y2="125" stroke="#426083"/></svg><div class="tn" style="left:50%;top:45px;border-color:#ffd166">${esc(n)}</div><div class="tn" style="left:35%;top:125px">L</div><div class="tn" style="left:65%;top:125px">R</div></div>`}
 function drawRecursion(d){$('#viz').innerHTML=`<div class="message"><b>Call stack frame</b><p><code>n = ${esc(d?.n)}</code></p><p>Recursive execution creates a new frame, then returns back through the frames.</p></div>`}
