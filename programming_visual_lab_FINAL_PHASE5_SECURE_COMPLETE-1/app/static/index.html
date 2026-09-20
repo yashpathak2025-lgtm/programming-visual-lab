@@ -276,4 +276,44 @@ const old=state.saved;if(old){$('#code').value=old.code;$('#language').value=old
  panel.querySelectorAll('[data-ai]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.ai)));
 })();
 </script>
-</body></html>
+<style>
+.pvl-ai-actions{display:flex;gap:6px;padding:7px 8px;border-top:1px solid #1b2b43}
+.pvl-ai-actions button{flex:1;padding:7px;font-size:10px}
+</style>
+<script>
+(function(){
+ const run=document.querySelector('#run'), code=document.querySelector('#code'), out=document.querySelector('#output');
+ if(!run||!code)return;
+ let lastError='';
+ function getError(){return (out?.textContent||'').trim();}
+ const bar=document.createElement('div');bar.className='pvl-ai-actions';
+ bar.innerHTML='<button id="pvlFixAi">🤖 Fix with AI</button><button id="pvlApplyAi" disabled>Apply AI Fix</button>';
+ const panel=document.querySelector('#pvlAiPanel');
+ if(panel)panel.appendChild(bar);
+ const result=document.querySelector('#pvlAiResult');
+ document.querySelector('#pvlFixAi').onclick=async()=>{
+   const err=getError();
+   if(!err){if(result)result.textContent='Run the program first so the actual runtime/compiler error can be analyzed.';return;}
+   lastError=err;
+   if(result)result.textContent='AI is analyzing the actual code + error...';
+   try{
+     const res=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+       action:'fix',code:code.value,language:document.querySelector('#language')?.value||'python',error:err,
+       prompt:'Return the complete corrected code first. Keep the same intended behavior. Clearly separate code from explanation.'
+     })});
+     const data=await res.json();
+     if(result)result.textContent=data.answer||data.error||'No AI response.';
+     const answer=data.answer||'';
+     const match=answer.match(/\`\`\`(?:python|java)?\s*([\s\S]*?)\`\`\`/i);
+     if(match){window.__pvlAiCode=match[1].trim();document.querySelector('#pvlApplyAi').disabled=false;}
+   }catch(e){if(result)result.textContent='AI request failed: '+e.message;}
+ };
+ document.querySelector('#pvlApplyAi').onclick=()=>{
+   if(!window.__pvlAiCode)return;
+   code.value=window.__pvlAiCode;
+   code.dispatchEvent(new Event('input',{bubbles:true}));
+   if(typeof resetRun==='function')resetRun();
+   if(result)result.textContent='AI fix applied to the editor. Review it, then press Run.';
+ };
+})();
+</script></body></html>
