@@ -27,7 +27,7 @@ function patchRun(){
       window.pvlPendingStdin=input.value||'';
       q('#pvlInputStatus').textContent='Input ready';
     }
-    return original.apply(this,arguments);
+    const oldFetch=window.fetch; window.fetch=async (url,opts)=>{ if(url==='/api/run' && opts && opts.body){ try{const body=JSON.parse(opts.body); body.stdin=window.pvlPendingStdin||''; opts={...opts,body:JSON.stringify(body)};}catch(_){} } return oldFetch(url,opts); }; try{return await original.apply(this,arguments);} finally{window.fetch=oldFetch;}
   };
   window.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&document.activeElement!==b){
