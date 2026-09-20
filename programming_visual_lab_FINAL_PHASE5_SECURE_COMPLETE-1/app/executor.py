@@ -37,7 +37,13 @@ def pvl_trace_compare(line,left_src,right_src,op,result):
  try:right=eval(right_src,{'__builtins__':SAFE,'visualize':visualize},f.f_locals)
  except:right=right_src
  emit('COMPARE',line,{'left':clean(left),'right':clean(right),'operator':op,'result':bool(result),'left_src':left_src,'right_src':right_src},f); return result
-def pvl_emit_stmt(kind,line): emit(kind,line,{},sys._getframe(1))
+def pvl_emit_stmt(kind,line,details=None):
+ f=sys._getframe(1); d=dict(details or {})
+ # Snapshot the first small list after the statement so visualizations show real values.
+ for name,val in f.f_locals.items():
+  if isinstance(val,list) and len(val)<=100 and all(isinstance(x,(int,float,str,bool,type(None))) for x in val):
+   d.setdefault('array',clean(val)); d.setdefault('array_name',name); break
+ emit(kind,line,d,f)
 def tracer(frame,event,arg):
  if frame.f_code.co_filename!='user_code.py': return tracer
  if event=='call': emit('CALL',frame.f_lineno,{'function':frame.f_code.co_name},frame)
@@ -65,7 +71,12 @@ class Guard(ast.NodeTransformer):
   return node
  def visit_Assign(self,node):
   node=self.generic_visit(node); event='SWAP' if node.targets and isinstance(node.targets[0],ast.Tuple) and len(node.targets[0].elts)==2 else 'ASSIGN'
-  mark=ast.Expr(ast.Call(func=ast.Name(id='pvl_emit_stmt',ctx=ast.Load()),args=[ast.Constant(event),ast.Constant(node.lineno)],keywords=[]))
+  details={}
+  if event=='SWAP' and isinstance(node.targets[0],ast.Tuple):
+   subs=[x for x in node.targets[0].elts if isinstance(x,ast.Subscript)]
+   if len(subs)==2:
+    details={'label':'swap','left_src':ast.unparse(subs[0]),'right_src':ast.unparse(subs[1])}
+  mark=ast.Expr(ast.Call(func=ast.Name(id='pvl_emit_stmt',ctx=ast.Load()),args=[ast.Constant(event),ast.Constant(node.lineno),ast.Constant(details)],keywords=[]))
   return [node,ast.copy_location(mark,node)]
  def visit_AnnAssign(self,node):
   node=self.generic_visit(node); mark=ast.Expr(ast.Call(func=ast.Name(id='pvl_emit_stmt',ctx=ast.Load()),args=[ast.Constant('ASSIGN'),ast.Constant(node.lineno)],keywords=[])); return [node,ast.copy_location(mark,node)]
