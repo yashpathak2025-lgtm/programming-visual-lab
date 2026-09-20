@@ -244,4 +244,36 @@ const old=state.saved;if(old){$('#code').value=old.code;$('#language').value=old
  window.addEventListener('pvl:execution-start',()=>{document.querySelector('#pvlTermStatus').textContent='Running';t.textContent+='\n$ '+(document.querySelector('#language').value||'python')+' '+(window.pvlEditor?.active?.()||'main.py')+'\n';});
 })();
 </script>
+<!-- PHASE3_AI_ASSISTANT -->
+<style>
+.pvl-ai{border:1px solid #1b2b43;background:#091522;border-radius:10px;margin-top:12px;overflow:hidden}
+.pvl-ai-head{padding:9px 11px;border-bottom:1px solid #1b2b43;font-size:12px;font-weight:800;color:#dce8fb}
+.pvl-ai-tools{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px}
+.pvl-ai-tools button{padding:7px 5px;font-size:10px}
+.pvl-ai-prompt{margin:0 8px 8px;width:calc(100% - 16px);min-height:55px;resize:vertical}
+.pvl-ai-result{padding:9px 11px;white-space:pre-wrap;font:11px/1.5 ui-monospace,monospace;color:#cbd8eb;border-top:1px solid #1b2b43;max-height:220px;overflow:auto}
+</style>
+<script>
+(function(){
+ if(document.getElementById('pvlAiPanel'))return;
+ const right=document.querySelector('.right'); if(!right)return;
+ const panel=document.createElement('section'); panel.id='pvlAiPanel';panel.className='pvl-ai';
+ panel.innerHTML='<div class="pvl-ai-head">🤖 AI CODING ASSISTANT</div><div class="pvl-ai-tools">'+
+ ['generate','explain','debug','fix','optimize','tests','hint'].map(a=>'<button data-ai="'+a+'">'+a.toUpperCase()+'</button>').join('')+
+ '</div><textarea id="pvlAiPrompt" class="pvl-ai-prompt" placeholder="Ask AI: explain this, find the error, optimize, generate tests, or give a DSA hint..."></textarea><div id="pvlAiResult" class="pvl-ai-result">AI assistant ready.</div>';
+ right.appendChild(panel);
+ async function ask(action){
+  const result=document.getElementById('pvlAiResult'); result.textContent='AI is analyzing...';
+  try{
+   const code=document.querySelector('#code')?.value||'';
+   const error=document.querySelector('#output')?.textContent||'';
+   const language=document.querySelector('#language')?.value||'python';
+   const prompt=document.getElementById('pvlAiPrompt').value;
+   const res=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,code,language,error,prompt})});
+   const data=await res.json(); result.textContent=data.answer||data.error||'No response.';
+  }catch(e){result.textContent='AI request failed: '+e.message}
+ }
+ panel.querySelectorAll('[data-ai]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.ai)));
+})();
+</script>
 </body></html>
