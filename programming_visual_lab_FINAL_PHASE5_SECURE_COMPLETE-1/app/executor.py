@@ -210,7 +210,7 @@ def execute_java(code,timeout_ms=5000,stdin_text=''):
             return {'ok':False,'language':'java','events':events,'stdout':stdout,'error':'JavaRuntimeError: '+r.stderr.split('PVL_EVENTS:')[0][-5000:],'source_lines':code.splitlines()}
         return {'ok':True,'language':'java','events':events,'stdout':stdout,'source_lines':code.splitlines()}
 
-\ndef _parse_line_markers(stderr):
+def _parse_line_markers(stderr):
     events=[]
     for line in stderr.splitlines():
         m=re.fullmatch(r'PVL_ARRAY_ITEM:(\d+):(\w+):(\d+):(-?\d+)',line.strip())
