@@ -162,7 +162,27 @@ function op(x){return ({Eq:'==',NotEq:'!=',Lt:'<',LtE:'<=',Gt:'>',GtE:'>=',In:'i
 function esc(x){return String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')}
 function renderVars(v){let keys=Object.keys(v);$('#vars').innerHTML=keys.length?keys.map(k=>`<div>${esc(k)}</div><div>${esc(typeof v[k]==='string'?v[k]:JSON.stringify(v[k]))}</div>`).join(''):`<div class="muted">No captured locals</div><div></div>`}
 function findVisualData(e){const d=e.details||{};let data=d.data,kind=(d.kind||'CUSTOM').toUpperCase();if(data==null&&e.variables){const keys=Object.keys(e.variables);const arrKey=keys.find(k=>Array.isArray(e.variables[k])&&e.variables[k].length<=100);if(arrKey){data={array:e.variables[arrKey]};if(Number.isInteger(d.j))data.j=d.j;if(Number.isInteger(d.index))data.index=d.index;if(Number.isInteger(d.mid))data.mid=d.mid;if(Number.isInteger(d.lo))data.lo=d.lo;if(Number.isInteger(d.hi))data.hi=d.hi;if(Number.isInteger(d.next))data.next=d.next;kind='ARRAY'}}return {data,kind,label:d.label||eventLabel(e)}}
-function renderVisual(e){const x=findVisualData(e),d=x.data;let kind=x.kind.toUpperCase();if(d&&typeof d==='object'&&!Array.isArray(d)){if(d.array)kind=kind==='CUSTOM'?'ARRAY':kind;if(d.queue)kind='QUEUE';if(d.stack)kind='STACK'}if((e.event==='COMPARE'||e.event==='SWAP'||e.event==='ASSIGN')&&d?.array)return drawStateObject(d,kind);if(kind==='LINKED_LIST')return drawNodes(d);if(kind==='STACK'||kind==='QUEUE')return drawStackQueue(d,kind);if(Array.isArray(d))return drawArray(d,kind);if(['ARRAY','BUBBLE','SELECTION','INSERTION','HEAP','MERGE','QUICK','BINARY','TWO_POINTER'].includes(kind))return drawStateObject(d,kind);if(['BFS','DFS'].includes(kind))return drawGraph(d,kind);if(kind==='BST')return drawTree(d);if(kind==='RECURSION')return drawRecursion(d);if(kind==='ERROR')return drawMessage(x.label,JSON.stringify(d));return drawMessage(x.label,typeof d==='string'?d:JSON.stringify(d,null,2))}
+function pvlDetectAlgorithm(code,language){
+ if(language!=='python')return 'CUSTOM';
+ const s=(code||'').toLowerCase();
+ if(/binary\s*search|\bmid\b/.test(s)&&(/while/.test(s)||/lo\s*=|hi\s*=/.test(s)))return 'BINARY';
+ if(/selection\s*sort|\bmin_idx\b|\bmin_index\b/.test(s))return 'SELECTION';
+ if(/insertion\s*sort|\bkey\b/.test(s)&&/for/.test(s))return 'INSERTION';
+ if(/merge\s*sort|def\s+merge\b|\bmerge\s*\(/.test(s))return 'MERGE';
+ if(/quick\s*sort|partition\s*\(/.test(s))return 'QUICK';
+ if(/bubble\s*sort|range\s*\(.*len\s*\(/.test(s)&&(/\[.*\+\s*1\]|\[j\]|\[i\]/.test(s)))return 'BUBBLE';
+ if(/stack|\.append\(|\.pop\(/.test(s))return 'STACK';
+ if(/queue|deque|\.popleft\(|front|rear/.test(s))return 'QUEUE';
+ if(/linked\s*list|next\s*=|node\b/.test(s))return 'LINKED_LIST';
+ return 'CUSTOM';
+}
+function pvlApplyDetectedKind(e){
+ const detected=pvlDetectAlgorithm(window.pvlLastCode||'',window.pvlLastLanguage||'python');
+ const d=e.details||{};
+ if((!d.kind||d.kind==='CUSTOM')&&detected!=='CUSTOM')d.kind=detected;
+ return d;
+}
+function renderVisual(e){e.details=pvlApplyDetectedKind(e);const x=findVisualData(e),d=x.data;let kind=x.kind.toUpperCase();if(d&&typeof d==='object'&&!Array.isArray(d)){if(d.array)kind=kind==='CUSTOM'?'ARRAY':kind;if(d.queue)kind='QUEUE';if(d.stack)kind='STACK'}if((e.event==='COMPARE'||e.event==='SWAP'||e.event==='ASSIGN')&&d?.array)return drawStateObject(d,kind);if(kind==='LINKED_LIST')return drawNodes(d);if(kind==='STACK'||kind==='QUEUE')return drawStackQueue(d,kind);if(Array.isArray(d))return drawArray(d,kind);if(['ARRAY','BUBBLE','SELECTION','INSERTION','HEAP','MERGE','QUICK','BINARY','TWO_POINTER'].includes(kind))return drawStateObject(d,kind);if(['BFS','DFS'].includes(kind))return drawGraph(d,kind);if(kind==='BST')return drawTree(d);if(kind==='RECURSION')return drawRecursion(d);if(kind==='ERROR')return drawMessage(x.label,JSON.stringify(d));return drawMessage(x.label,typeof d==='string'?d:JSON.stringify(d,null,2))}
 
 function drawArray(a,cls=''){if(!Array.isArray(a))a=[];const ev=state.events[state.step],label=ev?.details?.label||'';const isSwap=/swap/i.test(label)||ev?.event==='SWAP';const j=Number.isInteger(ev?.details?.j)?ev.details.j:activeIndex();$('#viz').innerHTML=`<div class="${cls||'array'}">${a.map((v,i)=>{const motion=isSwap?(i===j?'swap-left':i===j+1?'swap-right':''):'';return `<div class="cell ${i===activeIndex()?'active ':''}${motion}" style="animation-delay:${Math.min(i*45,450)}ms"><span class="idx">${i}</span>${esc(JSON.stringify(v))}</div>`}).join('')}</div>`}
 function activeIndex(){let e=state.events[state.step];let d=e?.details||{};return Number.isInteger(d.j)?d.j:Number.isInteger(d.index)?d.index:Number.isInteger(d.mid)?d.mid:-1}
