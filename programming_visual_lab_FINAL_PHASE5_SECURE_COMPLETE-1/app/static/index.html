@@ -47,7 +47,15 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 <div class="layout">
 <aside class="panel sidebar"><div class="hd">Learning Library</div><div class="section">Foundations</div><div id="lessonList"></div><div class="section">DSA Visuals</div><div id="dsaList"></div><div class="section">Java Track</div><div id="javaList"></div><div class="section">Question Mode</div><div class="lesson" id="openQuestions"><b>🧩 DSA Question Mode</b><span>Understand → Code → Run → Visualize</span></div></aside>
 <main class="workspace">
-<div class="panel toolbar"><select id="language"><option value="python">Python</option><option value="java">Java</option></select><button class="primary" id="run">▶ Run</button><button id="prev">← Previous</button><button id="next">Next Step →</button><button id="play">▶ Auto Play</button><button id="restart">↺ Restart</button><button id="clear">Clear</button><select id="speed"><option value="1200">0.25×</option><option value="800">0.5×</option><option value="450" selected>1×</option><option value="260">1.5×</option><option value="130">2×</option></select><label class="pill"><input type="checkbox" id="beginner" checked> Beginner</label><span class="grow"></span><span id="runState" class="pill">Ready</span></div>
+<div class="panel toolbar"><select id="language">
+<option value="python">Python</option>
+<option value="java">Java</option>
+<option value="c">C</option>
+<option value="cpp">C++</option>
+<option value="javascript">JavaScript</option>
+<option value="html">HTML</option>
+<option value="css">CSS</option>
+</select><button class="primary" id="run">▶ Run</button><button id="prev">← Previous</button><button id="next">Next Step →</button><button id="play">▶ Auto Play</button><button id="restart">↺ Restart</button><button id="clear">Clear</button><select id="speed"><option value="1200">0.25×</option><option value="800">0.5×</option><option value="450" selected>1×</option><option value="260">1.5×</option><option value="130">2×</option></select><label class="pill"><input type="checkbox" id="beginner" checked> Beginner</label><span class="grow"></span><span id="runState" class="pill">Ready</span></div>
 <div class="panel"><div class="editor-wrap"><div class="gutter" id="gutter">1</div><div class="codebox"><div id="highlight" class="highlight" style="top:14px"></div><textarea id="code" class="code" spellcheck="false"></textarea></div></div><div class="statusbar"><span id="lineStatus">Line —</span><span id="eventStatus">Event —</span><span id="eventCount">0 events</span><span class="grow"></span><span class="muted">Tip: use visualize(label, data, kind) for custom DSA views.</span></div></div>
 <div class="panel stage"><div class="stage-head"><div><div class="viz-title" id="vizTitle">Execution Visualizer</div><div class="viz-sub" id="vizSub">Run code to generate real execution events.</div></div><span id="stepBadge" class="pill">START</span></div><div id="viz" class="viz"><div class="message"><b>Your code becomes a moving lesson.</b><p>Every Next Step advances through execution events. The code line, variables, visual state and explanation stay synchronized.</p></div></div></div>
 </main>
@@ -316,4 +324,35 @@ const old=state.saved;if(old){$('#code').value=old.code;$('#language').value=old
    if(result)result.textContent='AI fix applied to the editor. Review it, then press Run.';
  };
 })();
-</script></body></html>
+</script>
+<style>
+.pvl-lang-note{font-size:10px;color:#91a4c2;padding:6px 10px;border:1px solid #1b2b43;border-radius:8px;background:#091522;margin-top:6px}
+.pvl-event-flash{animation:pvlEventFlash .5s ease-out}
+@keyframes pvlEventFlash{0%{transform:scale(.96);opacity:.55}100%{transform:scale(1);opacity:1}}
+</style>
+<script>
+(function(){
+ const lang=document.querySelector('#language'); if(!lang)return;
+ const note=document.createElement('div');note.className='pvl-lang-note';
+ lang.parentElement?.appendChild(note);
+ const update=()=>{
+   const x=lang.value;
+   note.textContent=(x==='python'||x==='java')
+     ? 'Execution + timeline visualization enabled.'
+     : 'Language UI ready. Secure compiler sandbox integration is being added before public execution is enabled.';
+   const code=document.querySelector('#code');
+   if(code && !code.value.trim()){
+     const samples={
+       c:'#include <stdio.h>\nint main(){\n    printf("Hello Programming Visual Lab\\n");\n    return 0;\n}',
+       cpp:'#include <iostream>\nint main(){\n    std::cout << "Hello Programming Visual Lab\\n";\n    return 0;\n}',
+       javascript:'console.log("Hello Programming Visual Lab");',
+       html:'<!doctype html>\n<html><body><h1>Programming Visual Lab</h1></body></html>',
+       css:'body { font-family: sans-serif; }'
+     };
+     if(samples[x]){code.value=samples[x];if(typeof syncLines==='function')syncLines();}
+   }
+ };
+ lang.addEventListener('change',update);update();
+})();
+</script>
+</body></html>
