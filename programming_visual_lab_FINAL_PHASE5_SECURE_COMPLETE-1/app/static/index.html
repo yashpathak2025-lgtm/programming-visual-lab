@@ -79,9 +79,7 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 <option value="c">C</option>
 <option value="cpp">C++</option>
 <option value="javascript">JavaScript</option>
-<option value="html">HTML</option>
-<option value="css">CSS</option>
-</select><button class="primary" id="run">▶ Run</button><button id="prev">← Previous</button><button id="next">Next Step →</button><button id="play"><button id="stepBack" title="Previous execution step">⏮ Back</button>▶ Auto Play</button><button id="restart">↺ Restart</button><button id="clear">Clear</button><select id="speed"><span id="speedLabel" class="viz-sub" style="margin-left:8px">1.0×</span><option value="1200">0.25×</option><option value="800">0.5×</option><option value="450" selected>1×</option><option value="260">1.5×</option><option value="130">2×</option></select><label class="pill"><input type="checkbox" id="beginner" checked> Beginner</label><span class="grow"></span><span id="runState" class="pill">Ready</span></div>
+</select><button class="primary" id="run">▶ Run</button><button class="danger" id="stop" type="button">■ Stop</button><button id="prev">← Previous</button><button id="next">Next Step →</button><button id="stepBack" title="Previous execution step">⏮ Back</button><button id="play">▶ Auto Play</button><button id="restart">↺ Restart</button><button id="clear">Clear</button><select id="speed"><span id="speedLabel" class="viz-sub" style="margin-left:8px">1.0×</span><option value="1200">0.25×</option><option value="800">0.5×</option><option value="450" selected>1×</option><option value="260">1.5×</option><option value="130">2×</option></select><label class="pill"><input type="checkbox" id="beginner" checked> Beginner</label><span class="grow"></span><span id="runState" class="pill">Ready</span></div>
 <div class="panel"><div class="editor-shell">
 <div class="file-explorer"><div class="muted" style="padding:6px">EXPLORER</div><div id="fileList"></div><button id="newFile" class="small">+ File</button></div>
 <div><div class="editor-wrap"><div class="gutter" id="gutter">1</div><div class="codebox"><div id="highlight" class="highlight" style="top:14px"></div><textarea id="code" class="code" spellcheck="false"></textarea></div></div><div class="editor-hint">Ctrl/Cmd+S: save · Tab: indent · Files are stored locally in this browser</div><div class="statusbar"><span id="lineStatus">Line —</span><span id="eventStatus">Event —</span><span id="eventCount">0 events</span><span class="grow"></span><span class="muted">Tip: use visualize(label, data, kind) for custom DSA views.</span></div></div>
@@ -311,6 +309,7 @@ function prevStep(){if(state.step<=0){state.step=-1;$('#stepBadge').textContent=
 function resetRun(){stopPlay();state.events=[];state.step=-1;$('#eventCount').textContent='0 events';$('#stepBadge').textContent='START';$('#runState').textContent='Ready';renderTimeline();drawMessage('Ready','Run the program to generate execution events.')}
 function stopPlay(){state.playing=false;$('#play').textContent='▶ Play';clearTimeout(state.timer)}
 function stopExecution(){cancelRun();stopPlay()}
+$('#stop').addEventListener('click',stopExecution);
 function autoPlay(){
  if(state.playing){stopPlay();return}
  if(!state.events.length){return}
