@@ -185,13 +185,94 @@ def execute_java(code,timeout_ms=5000,stdin_text=''):
             return {'ok':False,'language':'java','events':events,'stdout':stdout,'error':'JavaRuntimeError: '+r.stderr.split('PVL_EVENTS:')[0][-5000:],'source_lines':code.splitlines()}
         return {'ok':True,'language':'java','events':events,'stdout':stdout,'source_lines':code.splitlines()}
 
+\ndef _parse_line_markers(stderr):
+    events=[]
+    for line in stderr.splitlines():
+        m=re.fullmatch(r'PVL_LINE:(\d+)',line.strip())
+        if m and len(events)<MAX_EVENTS:
+            events.append({'line':int(m.group(1)),'event':'LINE','variables':{},'details':{}})
+    return events
+
+def _instrument_c_family(code,language):
+    if len(code)>MAX_CODE: raise ValueError(f'code exceeds {MAX_CODE} characters')
+    if re.search(r'\b(system|popen|fork|execve|execl|CreateProcess|WinExec)\s*\(',code):
+        raise ValueError('restricted process API detected')
+    if re.search(r'#\s*(include|pragma)\s*[<"]\s*(unistd|sys/socket|sys/ptrace|windows\.h)',code,re.I):
+        raise ValueError('restricted system header detected')
+    lines=code.splitlines()
+    out=['#include <stdio.h>']
+    for i,line in enumerate(lines,1):
+        s=line.strip()
+        if not s or s.startswith('#'):
+            out.append(line); continue
+        out.append(f'fprintf(stderr,"PVL_LINE:{i}\\n"); {line}')
+    return '\n'.join(out)
+
+def execute_c(code,timeout_ms=5000,stdin_text=''):
+    try: src=_instrument_c_family(code,'c')
+    except Exception as e:return {'ok':False,'language':'c','events':[],'stdout':'','error':'ValidationError: '+str(e),'source_lines':code.splitlines()}
+    with tempfile.TemporaryDirectory(prefix='pvl_c_') as td:
+        srcp=Path(td)/'main.c'; binp=Path(td)/'main'
+        srcp.write_text(src,encoding='utf8')
+        try:
+            c=subprocess.run(['gcc','-O0','-std=c11','-fno-stack-protector',str(srcp),'-o',str(binp)],cwd=td,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=5)
+        except FileNotFoundError:return {'ok':False,'language':'c','events':[],'stdout':'','error':'CompilerUnavailable: gcc is not installed.','source_lines':code.splitlines()}
+        except subprocess.TimeoutExpired:return {'ok':False,'language':'c','events':[],'stdout':'','error':'C compile timeout','source_lines':code.splitlines()}
+        if c.returncode!=0:return {'ok':False,'language':'c','events':[],'stdout':c.stdout,'error':'CCompileError: '+c.stderr[-6000:],'source_lines':code.splitlines()}
+        try:r=subprocess.run([str(binp)],cwd=td,input=stdin_text[:8000],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout_ms/1000)
+        except subprocess.TimeoutExpired:return {'ok':False,'language':'c','events':[],'stdout':'','error':'Timeout: C execution exceeded the limit.','source_lines':code.splitlines()}
+        events=_parse_line_markers(r.stderr)
+        return {'ok':r.returncode==0,'language':'c','events':events,'stdout':r.stdout[:MAX_OUTPUT],
+                'error':('CRuntimeError: '+r.stderr[-5000:] if r.returncode!=0 else ''),'source_lines':code.splitlines()}
+
+def execute_cpp(code,timeout_ms=5000,stdin_text=''):
+    try: src=_instrument_c_family(code,'cpp')
+    except Exception as e:return {'ok':False,'language':'cpp','events':[],'stdout':'','error':'ValidationError: '+str(e),'source_lines':code.splitlines()}
+    with tempfile.TemporaryDirectory(prefix='pvl_cpp_') as td:
+        srcp=Path(td)/'main.cpp'; binp=Path(td)/'main'
+        srcp.write_text(src,encoding='utf8')
+        try:c=subprocess.run(['g++','-O0','-std=c++17',str(srcp),'-o',str(binp)],cwd=td,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=5)
+        except FileNotFoundError:return {'ok':False,'language':'cpp','events':[],'stdout':'','error':'CompilerUnavailable: g++ is not installed.','source_lines':code.splitlines()}
+        except subprocess.TimeoutExpired:return {'ok':False,'language':'cpp','events':[],'stdout':'','error':'C++ compile timeout','source_lines':code.splitlines()}
+        if c.returncode!=0:return {'ok':False,'language':'cpp','events':[],'stdout':c.stdout,'error':'CppCompileError: '+c.stderr[-6000:],'source_lines':code.splitlines()}
+        try:r=subprocess.run([str(binp)],cwd=td,input=stdin_text[:8000],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout_ms/1000)
+        except subprocess.TimeoutExpired:return {'ok':False,'language':'cpp','events':[],'stdout':'','error':'Timeout: C++ execution exceeded the limit.','source_lines':code.splitlines()}
+        events=_parse_line_markers(r.stderr)
+        return {'ok':r.returncode==0,'language':'cpp','events':events,'stdout':r.stdout[:MAX_OUTPUT],
+                'error':('CppRuntimeError: '+r.stderr[-5000:] if r.returncode!=0 else ''),'source_lines':code.splitlines()}
+
+def _instrument_js(code):
+    if len(code)>MAX_CODE: raise ValueError(f'code exceeds {MAX_CODE} characters')
+    if re.search(r'\b(require|process\.|child_process|fs\.|net\.|dgram\.|http\.|https\.)',code):
+        raise ValueError('restricted Node.js API detected')
+    lines=code.splitlines()
+    out=[]
+    for i,line in enumerate(lines,1):
+        out.append(f'console.error("PVL_LINE:{i}"); {line}')
+    return '\n'.join(out)
+
+def execute_javascript(code,timeout_ms=5000,stdin_text=''):
+    try:src=_instrument_js(code)
+    except Exception as e:return {'ok':False,'language':'javascript','events':[],'stdout':'','error':'ValidationError: '+str(e),'source_lines':code.splitlines()}
+    with tempfile.TemporaryDirectory(prefix='pvl_js_') as td:
+        srcp=Path(td)/'main.js';srcp.write_text(src,encoding='utf8')
+        try:r=subprocess.run(['node','--no-addons','--max-old-space-size=128',str(srcp)],cwd=td,input=stdin_text[:8000],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout_ms/1000)
+        except FileNotFoundError:return {'ok':False,'language':'javascript','events':[],'stdout':'','error':'RuntimeUnavailable: Node.js is not installed.','source_lines':code.splitlines()}
+        except subprocess.TimeoutExpired:return {'ok':False,'language':'javascript','events':[],'stdout':'','error':'Timeout: JavaScript execution exceeded the limit.','source_lines':code.splitlines()}
+        events=_parse_line_markers(r.stderr)
+        runtime_err='\n'.join(x for x in r.stderr.splitlines() if not x.startswith('PVL_LINE:'))
+        return {'ok':r.returncode==0,'language':'javascript','events':events,'stdout':r.stdout[:MAX_OUTPUT],
+                'error':('JavaScriptRuntimeError: '+runtime_err[-5000:] if r.returncode!=0 else ''),'source_lines':code.splitlines()}
+
 def execute_local(code,language='python',timeout_ms=4000,stdin_text=''):
-    """Execute inside the trusted local runner process (used only inside the sandbox container)."""
+    """Execute inside the sandbox container. C/C++/JS use compiler/runtime binaries installed in the image."""
     language=language.lower().strip()
     if language=='python': return execute_python(code,timeout_ms,stdin_text)
     if language=='java': return execute_java(code,timeout_ms,stdin_text)
+    if language=='c': return execute_c(code,timeout_ms,stdin_text)
+    if language in ('cpp','c++'): return execute_cpp(code,timeout_ms,stdin_text)
+    if language in ('javascript','js'): return execute_javascript(code,timeout_ms,stdin_text)
     return {'ok':False,'language':language,'events':[],'stdout':'','error':'Unsupported language','source_lines':code.splitlines()}
-
 
 def _docker_execute(code, language, timeout_ms, stdin_text=''):
     """Fail-closed Docker execution manager for untrusted code.
