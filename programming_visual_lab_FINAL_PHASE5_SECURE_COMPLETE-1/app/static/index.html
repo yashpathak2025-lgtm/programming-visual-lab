@@ -257,11 +257,60 @@ function pvlRenderPointerBar(d){
 }
 
 function renderOutput(res){$('#output').textContent=res.stdout||res.error||'No output';}
-async function runCode(){stopPlay();$('#runState').textContent='Running…';state.events=[];state.step=-1;renderTimeline();try{const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:$('#code').value,language:$('#language').value,timeout_ms:5000})});const res=await r.json();state.result=res;state.events=res.events||[];renderOutput(res);$('#eventCount').textContent=state.events.length+' events';if(res.ok){$('#runState').textContent='Execution ready';if(state.current){state.completed.add(state.current.group+':'+state.current.name);persistProgress();renderLessons()}nextStep()}else{$('#runState').textContent='Execution error';$('#explain').innerHTML=`<b>Error:</b> ${esc(res.error)}<br><br>${esc(res.traceback||'')}`;drawMessage('Execution stopped',res.error)}}catch(e){$('#runState').textContent='Network error';drawMessage('Server error',e.message)}}
+let pvlRunSeq=0;
+let pvlActiveController=null;
+async function runCode(){
+  stopPlay();
+  if(pvlActiveController) pvlActiveController.abort();
+  const controller=new AbortController();
+  pvlActiveController=controller;
+  const runSeq=++pvlRunSeq;
+  $('#runState').textContent='Running…';
+  state.events=[];state.step=-1;renderTimeline();
+  try{
+    const r=await fetch('/api/run',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        code:$('#code').value,
+        language:$('#language').value,
+        timeout_ms:5000,
+        stdin:typeof window.pvlGetStdin==='function'?window.pvlGetStdin():''
+      }),
+      signal:controller.signal
+    });
+    const res=await r.json();
+    if(runSeq!==pvlRunSeq)return;
+    state.result=res;state.events=res.events||[];renderOutput(res);
+    $('#eventCount').textContent=state.events.length+' events';
+    if(res.ok){
+      $('#runState').textContent='Execution ready';
+      if(state.current){state.completed.add(state.current.group+':'+state.current.name);persistProgress();renderLessons()}
+      nextStep();
+    }else{
+      $('#runState').textContent='Execution error';
+      $('#explain').innerHTML=`<b>Error:</b> ${esc(res.error)}<br><br>${esc(res.traceback||'')}`;
+      drawMessage('Execution stopped',res.error)
+    }
+  }catch(e){
+    if(e.name==='AbortError'){
+      if(runSeq===pvlRunSeq){$('#runState').textContent='Execution cancelled';drawMessage('Execution cancelled','The current run was cancelled before its result was applied.')}
+      return;
+    }
+    if(runSeq===pvlRunSeq){$('#runState').textContent='Network error';drawMessage('Server error',e.message)}
+  }finally{
+    if(runSeq===pvlRunSeq)pvlActiveController=null;
+  }
+}
+function cancelRun(){
+  if(!pvlActiveController)return;
+  pvlActiveController.abort();
+  $('#runState').textContent='Cancelling…';
+}
 function nextStep(){if(state.step+1>=state.events.length){state.step=state.events.length;$('#stepBadge').textContent='DONE';$('#runState').textContent='Done';renderTimeline();return}state.step++;renderEvent(state.events[state.step])}
 function prevStep(){if(state.step<=0){state.step=-1;$('#stepBadge').textContent='START';renderTimeline();return}state.step--;renderEvent(state.events[state.step])}
 function resetRun(){stopPlay();state.events=[];state.step=-1;$('#eventCount').textContent='0 events';$('#stepBadge').textContent='START';$('#runState').textContent='Ready';renderTimeline();drawMessage('Ready','Run the program to generate execution events.')}
 function stopPlay(){state.playing=false;$('#play').textContent='▶ Play';clearTimeout(state.timer)}
+function stopExecution(){cancelRun();stopPlay()}
 function autoPlay(){
  if(state.playing){stopPlay();return}
  if(!state.events.length){return}
