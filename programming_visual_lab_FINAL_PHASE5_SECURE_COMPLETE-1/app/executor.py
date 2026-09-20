@@ -188,6 +188,12 @@ def execute_java(code,timeout_ms=5000,stdin_text=''):
 \ndef _parse_line_markers(stderr):
     events=[]
     for line in stderr.splitlines():
+        m=re.fullmatch(r'PVL_EVENT:(\d+):([A-Z_]+):(.*)',line.strip())
+        if m and len(events)<MAX_EVENTS:
+            ln,kind,detail=int(m.group(1)),m.group(2),m.group(3)
+            events.append({'line':ln,'event':kind if kind in ('COMPARE','ASSIGN','LOOP') else 'LINE',
+                           'variables':{},'details':{'label':detail[:240],'source':detail[:240]}})
+            continue
         m=re.fullmatch(r'PVL_LINE:(\d+)',line.strip())
         if m and len(events)<MAX_EVENTS:
             events.append({'line':int(m.group(1)),'event':'LINE','variables':{},'details':{}})
@@ -205,8 +211,19 @@ def _instrument_c_family(code,language):
         s=line.strip()
         if not s or s.startswith('#'):
             out.append(line); continue
-        out.append(f'fprintf(stderr,"PVL_LINE:{i}\\n"); {line}')
-    return '\n'.join(out)
+        # Emit a machine-readable event before each source line. For common
+        # educational statements, also classify assignments/comparisons/swaps.
+        if '==' in s or '!=' in s or '<=' in s or '>=' in s or re.search(r'(?<![=!<>])<(?![=])|(?<![=!<>])>(?![=])',s):
+            kind='COMPARE'
+        elif re.search(r'\\[[^\\]]+\\]\\s*=|\\b(?:int|long|float|double|char|string|auto)\\s+\\w+\\s*=',s):
+            kind='ASSIGN'
+        elif re.search(r'\\b(?:for|while)\\b',s):
+            kind='LOOP'
+        else:
+            kind='LINE'
+        safe=s.replace('\\\\','\\\\\\\\').replace('"','\\\\\"')
+        out.append(f'fprintf(stderr,"PVL_EVENT:{i}:{kind}:{safe}\\\\n"); {line}')
+    return '\\n'.join(out)
 
 def execute_c(code,timeout_ms=5000,stdin_text=''):
     try: src=_instrument_c_family(code,'c')
