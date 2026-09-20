@@ -15,7 +15,7 @@ function patchRun(){
   const b=q('#run');
   if(!b||b.dataset.pvlInputBridge) return;
   b.dataset.pvlInputBridge='1';
-  b.onclick=async()=>{
+  const runWithInput=async(e)=>{e.preventDefault();e.stopImmediatePropagation();
     if(typeof stopPlay==='function') stopPlay();
     q('#runState').textContent='Running…';
     state.events=[];state.step=-1;
@@ -38,6 +38,8 @@ function patchRun(){
       if(typeof drawMessage==='function') drawMessage('Server error',err.message);
     }
   };
+  b.addEventListener('click',runWithInput,true);
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();runWithInput(e)}},true);
 }
 function boot(){initInputBridge();patchRun()}
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
