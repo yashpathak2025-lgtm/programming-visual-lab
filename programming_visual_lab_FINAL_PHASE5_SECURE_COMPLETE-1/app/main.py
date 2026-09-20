@@ -860,3 +860,7 @@ def ai(req:AIRequest):
         return {'ok':False,'configured':True,'error':f'AI provider HTTP {e.code}: {detail}'}
     except Exception as e:
         return {'ok':False,'configured':True,'error':f'AI provider request failed: {e}'}
+
+
+# Phase 5 execution helpers
+_RUNS={}
