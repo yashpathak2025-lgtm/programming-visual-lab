@@ -41,6 +41,16 @@ header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:
 .ide-terminal-head button{padding:4px 8px;font-size:10px;margin-left:auto}
 .ide-terminal-body{padding:9px 11px;overflow:auto;white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#cbd8eb}
 .run-stop{display:flex;gap:5px}
+
+/* Phase 4D — synchronized array movement */
+.visual-array-stage .array{position:relative;display:flex;justify-content:center;gap:10px;min-height:92px;align-items:center}
+.visual-array-stage .cell{position:relative;transition:transform .55s ease,opacity .35s ease;will-change:transform}
+.visual-array-stage .cell.compare{animation:pvlCompare .7s ease-in-out infinite alternate}
+.visual-array-stage .cell.swap-left{animation:pvlSwapLeft .7s ease-in-out both}
+.visual-array-stage .cell.swap-right{animation:pvlSwapRight .7s ease-in-out both}
+@keyframes pvlCompare{from{transform:translateY(0) scale(1)}to{transform:translateY(-10px) scale(1.08)}}
+@keyframes pvlSwapLeft{0%{transform:translateX(0)}45%{transform:translateX(28px) translateY(-8px) scale(1.08)}100%{transform:translateX(0)}}
+@keyframes pvlSwapRight{0%{transform:translateX(0)}45%{transform:translateX(-28px) translateY(8px) scale(1.08)}100%{transform:translateX(0)}}
 </style></head>
 <body>
 <header><div class="brand"><div class="logo">PV</div><div class="owner-badge">Built by <b>Yash Pathak</b></div><div>Programming Visual Lab<div class="muted" style="font-size:10px">Code → Execution → Visual Animation → Explanation</div></div></div><div class="top-actions"><span id="progressPill" class="pill">Progress 0%</span><button id="themeBtn">☀/☾</button><button id="saveBtn">Save</button><button id="exportBtn">Export</button><button id="importBtn">Import</button><input id="importFile" type="file" accept="application/json" hidden></div></header>
@@ -147,7 +157,38 @@ function findVisualData(e){const d=e.details||{};let data=d.data,kind=(d.kind||'
 function renderVisual(e){const x=findVisualData(e),d=x.data;let kind=x.kind;if((e.event==='COMPARE'||e.event==='SWAP'||e.event==='ASSIGN')&&d&&d.array)return drawStateObject(d,kind);if(kind==='TWO_POINTER')return drawStateObject(d,kind);if(d&&typeof d==='object'&&!Array.isArray(d)){if(d.array)kind=kind==='CUSTOM'?'ARRAY':kind; if(d.queue)kind='QUEUE';if(d.stack)kind='STACK'}if(Array.isArray(d)){if(kind.includes('STACK'))return drawArray(d,'stack');if(kind.includes('QUEUE'))return drawArray(d,'queue');return drawArray(d)}if(kind==='ARRAY'||kind==='BUBBLE'||kind==='SELECTION'||kind==='INSERTION'||kind==='HEAP'||kind==='MERGE'||kind==='QUICK'||kind==='BINARY')return drawStateObject(d,kind);if(kind==='LINKED_LIST')return drawNodes(d);if(kind==='STACK')return drawArray(d?.stack||d,'stack');if(kind==='QUEUE')return drawArray(d?.queue||d,'queue');if(['BFS','DFS'].includes(kind))return drawGraph(d,kind);if(kind==='BST')return drawTree(d);if(kind==='RECURSION')return drawRecursion(d);if(kind==='ERROR')return drawMessage(x.label,JSON.stringify(d));return drawMessage(x.label,typeof d==='string'?d:JSON.stringify(d,null,2))}
 function drawArray(a,cls=''){if(!Array.isArray(a))a=[];const ev=state.events[state.step],label=ev?.details?.label||'';const isSwap=/swap/i.test(label)||ev?.event==='SWAP';const j=Number.isInteger(ev?.details?.j)?ev.details.j:activeIndex();$('#viz').innerHTML=`<div class="${cls||'array'}">${a.map((v,i)=>{const motion=isSwap?(i===j?'swap-left':i===j+1?'swap-right':''):'';return `<div class="cell ${i===activeIndex()?'active ':''}${motion}" style="animation-delay:${Math.min(i*45,450)}ms"><span class="idx">${i}</span>${esc(JSON.stringify(v))}</div>`}).join('')}</div>`}
 function activeIndex(){let e=state.events[state.step];let d=e?.details||{};return Number.isInteger(d.j)?d.j:Number.isInteger(d.index)?d.index:Number.isInteger(d.mid)?d.mid:-1}
-function drawStateObject(d,kind){if(!d){drawMessage(kind,'No visualization data');return}if(Array.isArray(d))return drawArray(d);let a=d.array||d.values||[];let active=Number.isInteger(d.j)?d.j:(Number.isInteger(d.index)?d.index:(Number.isInteger(d.mid)?d.mid:-1));const ev=state.events[state.step],isSwap=/swap/i.test(ev?.details?.label||'')||ev?.event==='SWAP',j=Number.isInteger(d.j)?d.j:-1;$('#viz').innerHTML=`<div><div class="array">${a.map((v,i)=>{const motion=isSwap?(i===j?'swap-left':i===j+1?'swap-right':''):'';return `<div class="cell ${i===active||i===d.next||i===d.min?'active ':''}${motion}" style="animation-delay:${Math.min(i*45,450)}ms"><span class="idx">${i}</span>${esc(JSON.stringify(v))}<span class="ptr">${i===d.lo?'LO ':''}${i===d.mid?'MID ':''}${i===d.hi?'HI ':''}${i===d.j?'J ':''}${i===d.next?'NEXT ':''}${i===d.min?'MIN':''}</span></div>`}).join('')}</div><div class="viz-sub" style="text-align:center;margin-top:30px">${esc(kind)} · ${esc(JSON.stringify(Object.fromEntries(Object.entries(d).filter(([k])=>k!=='array'))))}</div></div>`}
+function drawStateObject(d,kind){
+  if(!d){drawMessage(kind,'No visualization data');return}
+  if(Array.isArray(d))return drawArray(d);
+  let a=d.array||d.values||[];
+  if(!Array.isArray(a)) a=[];
+  let active=Number.isInteger(d.j)?d.j:(Number.isInteger(d.index)?d.index:(Number.isInteger(d.mid)?d.mid:-1));
+  const ev=state.events[state.step], ed=ev?.details||{};
+  const swap=ev?.event==='SWAP'||/swap/i.test(ed.label||'');
+  const j=Number.isInteger(d.j)?d.j:-1;
+  const k=Number.isInteger(d.k)?d.k:(swap&&j>=0?j+1:-1);
+  const compare=ev?.event==='COMPARE';
+  const lo=Number.isInteger(d.lo)?d.lo:-1, hi=Number.isInteger(d.hi)?d.hi:-1;
+  $('#viz').innerHTML=`<div class="visual-array-stage">
+    <div class="array">${a.map((v,i)=>{
+      let cls='cell';
+      if(i===active||i===d.next||i===d.min) cls+=' active';
+      if(compare&&(i===j||i===k)) cls+=' compare';
+      if(swap&&i===j) cls+=' swap-left';
+      if(swap&&i===k) cls+=' swap-right';
+      let ptr='';
+      if(i===lo)ptr+='LO ';
+      if(i===hi)ptr+='HI ';
+      if(i===j)ptr+='J ';
+      if(i===k)ptr+='K ';
+      if(i===d.next)ptr+='NEXT ';
+      if(i===d.min)ptr+='MIN';
+      return `<div class="${cls}" style="animation-delay:${Math.min(i*35,350)}ms"><span class="idx">${i}</span>${esc(JSON.stringify(v))}<span class="ptr">${ptr}</span></div>`
+    }).join('')}</div>
+    <div class="viz-sub" style="text-align:center;margin-top:20px">${esc(kind)} · ${swap?'Swapping positions '+j+' ↔ '+k:compare?'Comparing active positions':''}</div>
+  </div>`
+}
+
 function drawNodes(d){let a=Array.isArray(d)?d:(d?.values||d?.list||[]);$('#viz').innerHTML=`<div class="nodes">${a.map((v,i)=>`<div class="node">${esc(v)}<small class="muted" style="display:block">node ${i}</small></div>${i<a.length-1?'<span class="arrow">→</span>':''}`).join('')}</div>`}
 function drawGraph(d,kind){const node=d?.node||d?.current||'?';const seen=d?.seen||d?.visited||[];$('#viz').innerHTML=`<div class="message"><b>${kind}: ${esc(node)}</b><p>Visited: <code>${esc(JSON.stringify(seen))}</code></p><p>Each node is processed once when it enters the traversal state.</p></div>`}
 function drawTree(d){const n=d?.node||d?.value||'?';$('#viz').innerHTML=`<div class="tree"><svg><line x1="50%" y1="45" x2="35%" y2="125" stroke="#426083"/><line x1="50%" y1="45" x2="65%" y2="125" stroke="#426083"/></svg><div class="tn" style="left:50%;top:45px;border-color:#ffd166">${esc(n)}</div><div class="tn" style="left:35%;top:125px">L</div><div class="tn" style="left:65%;top:125px">R</div></div>`}
