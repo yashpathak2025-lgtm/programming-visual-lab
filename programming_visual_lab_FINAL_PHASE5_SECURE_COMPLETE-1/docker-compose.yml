@@ -1,0 +1,9 @@
+# This compose file is intentionally build-only. Do NOT mount /var/run/docker.sock
+# into the FastAPI application: Docker socket access is equivalent to host-root access.
+services:
+  sandbox-image:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: programming-visual-lab-sandbox:latest
+    command: ["python", "-c", "print('sandbox image ready')"]

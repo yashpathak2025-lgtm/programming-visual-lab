@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+.git
+*.zip
+README.md
+FINAL_AUDIT.md
+tests
+start.sh
+start.bat
