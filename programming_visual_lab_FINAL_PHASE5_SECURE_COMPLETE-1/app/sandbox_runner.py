@@ -21,6 +21,7 @@ def main():
             str(req.get("code", "")),
             str(req.get("language", "python")),
             int(req.get("timeout_ms", 4000)),
+            str(req.get("stdin", "")),
         )
     except Exception as exc:
         result = {
