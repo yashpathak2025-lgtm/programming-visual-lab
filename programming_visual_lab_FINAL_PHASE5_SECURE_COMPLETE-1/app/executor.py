@@ -188,6 +188,17 @@ def execute_java(code,timeout_ms=5000,stdin_text=''):
 \ndef _parse_line_markers(stderr):
     events=[]
     for line in stderr.splitlines():
+        m=re.fullmatch(r'PVL_ARRAY_ITEM:(\d+):(\w+):(\d+):(-?\d+)',line.strip())
+        if m:
+            ln,name,idx,val=int(m.group(1)),m.group(2),int(m.group(3)),int(m.group(4))
+            target=next((x for x in reversed(events) if x.get('line')==ln),None)
+            if target:
+                d=target.setdefault('details',{})
+                arr=d.setdefault('array',[])
+                while len(arr)<=idx: arr.append(None)
+                arr[idx]=val
+                d['array_name']=name
+            continue
         m=re.fullmatch(r'PVL_EVENT:(\d+):([A-Z_]+):(.*)',line.strip())
         if m and len(events)<MAX_EVENTS:
             ln,kind,detail=int(m.group(1)),m.group(2),m.group(3)
@@ -198,32 +209,6 @@ def execute_java(code,timeout_ms=5000,stdin_text=''):
         if m and len(events)<MAX_EVENTS:
             events.append({'line':int(m.group(1)),'event':'LINE','variables':{},'details':{}})
     return events
-
-def _instrument_c_family(code,language):
-    if len(code)>MAX_CODE: raise ValueError(f'code exceeds {MAX_CODE} characters')
-    if re.search(r'\b(system|popen|fork|execve|execl|CreateProcess|WinExec)\s*\(',code):
-        raise ValueError('restricted process API detected')
-    if re.search(r'#\s*(include|pragma)\s*[<"]\s*(unistd|sys/socket|sys/ptrace|windows\.h)',code,re.I):
-        raise ValueError('restricted system header detected')
-    lines=code.splitlines()
-    out=['#include <stdio.h>']
-    for i,line in enumerate(lines,1):
-        s=line.strip()
-        if not s or s.startswith('#'):
-            out.append(line); continue
-        # Emit a machine-readable event before each source line. For common
-        # educational statements, also classify assignments/comparisons/swaps.
-        if '==' in s or '!=' in s or '<=' in s or '>=' in s or re.search(r'(?<![=!<>])<(?![=])|(?<![=!<>])>(?![=])',s):
-            kind='COMPARE'
-        elif re.search(r'\\[[^\\]]+\\]\\s*=|\\b(?:int|long|float|double|char|string|auto)\\s+\\w+\\s*=',s):
-            kind='ASSIGN'
-        elif re.search(r'\\b(?:for|while)\\b',s):
-            kind='LOOP'
-        else:
-            kind='LINE'
-        safe=s.replace('\\\\','\\\\\\\\').replace('"','\\\\\"')
-        out.append(f'fprintf(stderr,"PVL_EVENT:{i}:{kind}:{safe}\\\\n"); {line}')
-    return '\\n'.join(out)
 
 def execute_c(code,timeout_ms=5000,stdin_text=''):
     try: src=_instrument_c_family(code,'c')
