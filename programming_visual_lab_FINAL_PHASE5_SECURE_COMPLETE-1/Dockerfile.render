@@ -7,6 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /opt/pvl
 
+# Render's web container also needs the Java toolchain because the lab supports Java execution.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openjdk-17-jdk-headless ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
