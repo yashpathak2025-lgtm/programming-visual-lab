@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 from .executor import execute
-import json, os
+import json, os, urllib.request, urllib.error
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title='Programming Visual Lab',version='4.0.0',description='Execution-first programming and DSA visual laboratory')
@@ -38,22 +38,35 @@ class AIRequest(BaseModel):
 
 @app.post('/api/ai')
 def ai(req:AIRequest):
-    # Local, deterministic assistant for Phase 3 foundation.
-    # Provider-backed AI can be plugged in later without exposing API keys to the browser.
     code=req.code.strip()
     lang=req.language
-    if req.action=='explain':
-        return {'ok':True,'title':'Code Explanation','answer':f'This {lang} program contains {len(code.splitlines()) if code else 0} lines. Use the execution timeline to inspect each event and variable change.'}
-    if req.action=='debug':
-        return {'ok':True,'title':'Debug Analysis','answer':('No runtime error supplied. Run the program first and send the actual error here.' if not req.error else f'Runtime error received: {req.error[:2000]}')}
-    if req.action=='fix':
-        return {'ok':True,'title':'Fix Suggestion','answer':('Paste code and the actual error to generate a targeted fix.' if not req.error else 'A provider-backed AI can now be connected here to return a safe, targeted patch using this code and runtime error.')}
-    if req.action=='optimize':
-        return {'ok':True,'title':'Optimization','answer':'Optimization should preserve behavior first; inspect the execution timeline, then reduce unnecessary loops, repeated work, or memory usage.'}
-    if req.action=='tests':
-        return {'ok':True,'title':'Test Cases','answer':'Add normal, boundary, empty-input, and invalid-input cases. The next AI provider layer will generate executable tests from the submitted code.'}
-    if req.action=='hint':
-        return {'ok':True,'title':'DSA Hint','answer':('Think about the data structure and invariant that must remain true after each step.' if not req.prompt else f'Hint for: {req.prompt[:1000]}')}
-    if req.action=='generate':
-        return {'ok':True,'title':'Code Generation','answer':f'Generation request received for {lang}. Connect an AI provider on the server to produce code without exposing credentials in the frontend.'}
-    return {'ok':False,'error':'Unsupported AI action'}
+    api_key=os.environ.get('OPENAI_API_KEY','').strip()
+    base=os.environ.get('OPENAI_BASE_URL','https://api.openai.com/v1').rstrip('/')
+    model=os.environ.get('OPENAI_MODEL','gpt-5-mini')
+    if not api_key:
+        return {'ok':False,'configured':False,'error':'AI provider is not configured. Set OPENAI_API_KEY on the server; never put the key in frontend JavaScript.'}
+    tasks={
+      'generate':'Generate a correct, beginner-friendly program for the user request. Return code first, then a short explanation.',
+      'explain':'Explain the supplied code step by step in simple language. Mention important variables, loops and functions.',
+      'debug':'Find likely bugs using the supplied code and actual runtime error. Explain the cause and give a corrected version.',
+      'fix':'Fix the supplied code using the actual runtime error when available. Return the complete corrected code and a short explanation.',
+      'optimize':'Suggest safe performance/readability improvements while preserving behavior. Explain complexity before and after.',
+      'tests':'Create useful executable test cases including normal, boundary and edge cases for the supplied code.',
+      'hint':'Give a progressive DSA/programming hint without immediately giving away the complete solution.'
+    }
+    system=("You are the Programming Visual Lab coding assistant. Be accurate and security-conscious. "
+            "Do not claim code was executed unless execution output is supplied. Language: "+lang+".")
+    user=tasks[req.action]+"\n\nUSER REQUEST:\n"+req.prompt[:6000]+"\n\nCODE:\n"+code[:24000]+"\n\nRUNTIME OUTPUT/ERROR:\n"+req.error[:12000]
+    payload=json.dumps({'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],'temperature':0.2}).encode()
+    try:
+        request=urllib.request.Request(base+'/chat/completions',data=payload,headers={'Content-Type':'application/json','Authorization':'Bearer '+api_key},method='POST')
+        with urllib.request.urlopen(request,timeout=30) as response:
+            data=json.loads(response.read().decode('utf-8'))
+        answer=data.get('choices',[{}])[0].get('message',{}).get('content','').strip()
+        if not answer: return {'ok':False,'configured':True,'error':'AI provider returned an empty response.'}
+        return {'ok':True,'configured':True,'title':req.action.title(),'answer':answer,'model':model}
+    except urllib.error.HTTPError as e:
+        detail=e.read().decode('utf-8','ignore')[:1000]
+        return {'ok':False,'configured':True,'error':f'AI provider HTTP {e.code}: {detail}'}
+    except Exception as e:
+        return {'ok':False,'configured':True,'error':f'AI provider request failed: {e}'}
