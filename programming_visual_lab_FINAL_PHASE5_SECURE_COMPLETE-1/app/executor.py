@@ -114,7 +114,7 @@ def execute_python(code,timeout_ms=4000,stdin_text=''):
     with tempfile.TemporaryDirectory(prefix='pvl_py_') as td:
         p=Path(td)/'runner.py'; p.write_text(runner,encoding='utf8')
         env={'PYTHONIOENCODING':'utf-8','PATH':os.environ.get('PATH','')}
-        try: r=subprocess.run([sys.executable,str(p)],cwd=td,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,input=stdin_text[:8000],timeout=timeout_ms/1000,env=env,preexec_fn=limits if os.name!='nt' else None)
+        try: r=subprocess.run([sys.executable,str(p)],cwd=td,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,input=stdin_text[:8000],timeout=timeout_ms/1000,env=env,preexec_fn=limits if os.name!='nt' else None)
         except subprocess.TimeoutExpired: return {'ok':False,'language':'python','events':[],'stdout':'','error':'Timeout: execution exceeded the limit.','source_lines':code.splitlines()}
         lines=r.stdout.strip().splitlines()
         if not lines:return {'ok':False,'language':'python','events':[],'stdout':r.stderr[-MAX_OUTPUT:],'error':'Runner produced no result.','source_lines':code.splitlines()}
