@@ -27,6 +27,7 @@ function patchRun(){
       q('#eventCount').textContent=state.events.length+' events';
       if(res.ok){
         q('#runState').textContent='Execution ready';
+        if(state.current){state.completed.add(state.current.group+':'+state.current.name);if(typeof persistProgress==='function')persistProgress();if(typeof renderLessons==='function')renderLessons();}
         if(state.current&&typeof nextStep==='function') nextStep();
       }else{
         q('#runState').textContent='Execution error';
